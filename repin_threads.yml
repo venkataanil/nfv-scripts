@@ -1,0 +1,39 @@
+---
+- name: move threads 
+  hosts: computes
+  become: true
+  tasks:
+    - name: move emulator threads 
+      shell: |
+        cpu_list=`grep -e "^CPUAffinity=.*" /etc/systemd/system.conf | sed -e 's/CPUAffinity=//' -e 's/ /,/g'`
+        if [ ! -z "$cpu_list" ]; then
+          virsh_list=`virsh list| sed -e '1,2d' -e 's/\s\+/ /g' | awk -F" " '{print $2}'`
+          if [ ! -z "$virsh_list" ]; then
+            for vm in $virsh_list; do virsh emulatorpin $vm --cpulist $cpu_list; done
+          fi
+        fi
+      when: repin_kvm_emulator|default(false)|bool
+    - name: move pmd threads for hyper threading
+      shell: | 
+        declare -a vnic
+        instance=$(virsh list | grep running | awk '{print $2}')
+        n=0
+        for name in $(virsh dumpxml $instance | grep openvswitch | awk -F\' '{print $4}'| sed -r -n "1s/.*openvswitch\/(.*)/\1/p"); do
+          vnic[$n]=$name
+          n=$((n+1))
+        done
+        if ((n>=1)); then
+          for i in $(seq $n); do
+            ovs-vsctl set Interface dpdk$((i-1)) other_config:pmd-rxq-affinity=0:$(eval \$pmd_dpdk$((i-1)))
+            ovs-vsctl set Interface ${vnic[((i-1))]} other_config:pmd-rxq-affinity=0:$(eval \$pmd_vm_eth$((i-1)))
+          done
+        fi
+      when: repin_ovs_pmd|default(false)|bool
+    - name: move ovs non-pmd threads
+      shell: |
+        hexnum=0
+        for i in `grep ^CPUAffinity /etc/systemd/system.conf | awk -F= '{print $2}'`; do hexnum=$((hexnum+2**i)); done
+        core_mask=$(printf "%x\n" $hexnum)
+        ovs-vsctl --no-wait set Open_vSwitch . other_config:dpdk-lcore-mask=0x${core_mask}
+      when: repin_ovs_nonpmd|default(false)|bool
+

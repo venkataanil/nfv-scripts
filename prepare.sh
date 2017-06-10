@@ -7,28 +7,28 @@ error ()
   exit 1
 }
 
+function get_vm_mac() {
+# arg1: vm name
+# arg2: network name
+  local vm=$1
+  local net=$2
+  local vm_ip=$(openstack server show $vm | sed -n -r "s/.*$net=([.0-9]+).*/\1/p")
+  local mac=$(neutron port-list --fixed_ips ip_address=${vm_ip} | sed -n -r "s/.*([a-f0-9]{2}:[a-f0-9]{2}:[a-f0-9]{2}:[a-f0-9]{2}:[a-f0-9]{2}:[a-f0-9]{2}).*/\1/p")
+  echo $mac
+}
+
+
 if [ ! -f nfv_test.cfg ]; then
   error "nfv_test.cfg can't be found"
 fi
 source nfv_test.cfg
-
-traffic_src_mac=$(dmesg | sed -r -n "s/.*${traffic_gen_src_slot}:.*([0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2})/\1/p" | tail -1)
-traffic_dst_mac=$(dmesg | sed -r -n "s/.*${traffic_gen_dst_slot}:.*([0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2})/\1/p" | tail -1)
-echo traffic_src_mac=${traffic_src_mac}, traffic_dst_mac=${traffic_dst_mac}
-if [[ -z "${traffic_src_mac}" || -z "{traffic_dst_mac}" ]]; then
-  error "failed to get traffic gen mac address"
-fi
-
-[[ $# -eq 1 ]] || error "Usuage: $0 <number of instances to create>" 
-
-num_vm=$1
 
 source /home/stack/overcloudrc || error "can't load overcloudrc"
 
 #update nova quota to allow more core use and more network
 project_id=$(openstack project show -f value -c id admin)
 nova quota-update --instances $num_vm $project_id
-nova quota-update --cores $(( $num_vm * 4 )) $project_id
+nova quota-update --cores $(( $num_vm * 6 )) $project_id
 neutron quota-update --tenant_id $project_id --network $(( $num_vm + 2 ))
 neutron quota-update --tenant_id $project_id --subnet $(( $num_vm + 2 ))
 
@@ -41,7 +41,7 @@ openstack security group rule list | grep 22:22 || openstack security group rule
 openstack security group rule list | grep icmp || openstack security group rule create default --protocol icmp
 
 if ! openstack flavor list | grep nfv; then 
-  openstack flavor create nfv --id 1 --ram 4096 --disk 20 --vcpus 4
+  openstack flavor create nfv --id 1 --ram 4096 --disk 20 --vcpus 6
   nova flavor-key 1 set hw:cpu_policy=dedicated
   nova flavor-key 1 set hw:mem_page_size=1GB
 fi
@@ -230,64 +230,23 @@ for host in computes controllers VMs; do
   ANSIBLE_HOST_KEY_CHECKING=False UserKnownHostsFile=/dev/null ansible $host -i nodes -m service -a "name=sshd state=restarted"
 done
 
-ansible-playbook -i nodes --extra-vars "run_pbench=${run_pbench}" nfv.yml
 
-# deploy VPP inside instances
-ansible-playbook -i nodes vm.yml --extra-vars "traffic_src_mac=${traffic_src_mac} traffic_dst_mac=${traffic_dst_mac} routing=${routing} run_pbench=${run_pbench}" || error "failed to run NFV application"
+ansible-playbook -i nodes repin_threads.yml --extra-vars "repin_ovs_nonpmd=${repin_ovs_nonpmd} repin_kvm_emulator=${repin_kvm_emulator} repin_ovs_pmd=${repin_ovs_pmd} pmd_vm_eth0=${pmd_vm_eth0} pmd_vm_eth1=${pmd_vm_eth1} pmd_vm_eth2=${pmd_vm_eth2} pmd_dpdk0=${pmd_dpdk0} pmd_dpdk1=${pmd_dpdk1} pmd_dpdk2=${pmd_dpdk2}" || error "failed to repin thread"
 
-#ansible-playbook -i nodes repin_threads.yml --extra-vars "repin_ovs_nonpmd=${repin_ovs_nonpmd} repin_kvm_emulator=${repin_kvm_emulator}" || error "failed to repin thread"
+ansible-playbook -i nodes nfv.yml --extra-vars "run_pbench=${run_pbench} traffic_src_mac=${traffic_src_mac} traffic_dst_mac=${traffic_dst_mac} routing=${routing}" || error "failed to run NFV application"
 
-mac1=$(cat vars/demo1_macs | sed -r -n "s/.*mac1=(.*)/\1/p") || error "failed to parse vars/demo1_macs"
-mac2=$(cat vars/demo${num_vm}_macs | sed -r -n "s/.*mac2=(.*)/\1/p") || error "failed to parse vars/demo${num_vm}_macs"
 
 # prepare test script
-txrx_cmd="sudo ./MoonGen/build/MoonGen ./txrx.lua --size=${data_pkt_size} \
-          --devices=0,1 --runTime=30 --srcIps=192.168.0.100,192.168.${num_vm}.100 \
-          --dstIps=192.168.${num_vm}.100,192.168.0.100 \
-          --dstMacs=${mac1},${mac2} --calibrateTxRate=0 \
-          --vlanIds=${data_vlan_start},$((data_vlan_start+num_vm)) \
-          --bidirectional=${traffic_bidirectional} --rate=${traffic_rate_init} \
-          --nrFlows=128 --flowMods=srcIp"
-binary_search_cmd="sudo ./binary-search.py --frame-size=${data_pkt_size} \
-          --run-bidirec=${traffic_bidirectional} --search-runtime=30 \
-          --validation-runtime=120 --rate=${traffic_rate_init} \
-          --src-ips-list=192.168.0.100,192.168.${num_vm}.100 \
-          --dst-ips-list=192.168.${num_vm}.100,192.168.0.100 \
-          --dst-macs-list=${mac1},${mac2}  \
-          --vlan-ids-list=${data_vlan_start},$((data_vlan_start+num_vm)) \
-          --max-loss-pct=${traffic_loss_pct} \
-          --num-flows=128 --use-src-ip-flows=1 --use-dst-ip-flows=0 \
-          --use-src-mac-flows=0 --use-dst-mac-flows=0"
-
-if [[ ${run_pbench} == "yes" ]]; then
-cat > ${traffic_gen_dir}/run_txrx.sh <<EOF
-#!/bin/bash
-$PWD/start_pbench.sh
-pbench-clear-results
-pbench-user-benchmark --config="${pbench_benchmark_name}" -- ${txrx_cmd}
-pbench-move-results
-EOF
-cat > ${traffic_gen_dir}/start_binary_search.sh <<EOF
-#!/bin/bash
-$PWD/start_pbench.sh
-pbench-clear-results
-pbench-user-benchmark --config="${pbench_benchmark_name}" -- ${binary_search_cmd}
-pbench-move-results
-EOF
-else
-cat > ${traffic_gen_dir}/run_txrx.sh <<EOF
-#!/bin/bash
-${txrx_cmd}
-EOF
-cat > ${traffic_gen_dir}/start_binary_search.sh <<EOF
-#!/bin/bash
-${binary_search_cmd}
-EOF
+if [[ $traffic_loss_pct != 0 ]]; then
+  echo $PWD/start_pbench.sh > start-pbench-trafficgen
 fi
 
-chmod 777 ${traffic_gen_dir}/run_txrx.sh
-
-chmod 777 ${traffic_gen_dir}/start_binary_search.sh
-
-echo "change directory to ${traffic_gen_dir} and run run_txrx.sh or start_binary_search.sh"
+if [[ $routing == "vpp" ]]; then
+  source $overcloudrc
+  mac1=`get_vm_mac demo1 provider-nfv0`
+  mac2=`get_vm_mac demo${num_vm} provider-nfv${num_vm}`
+  echo pbench-trafficgen --config="pbench-trafficgen" --num-flows=128 --traffic-directions=bidirec --src-ips=192.168.0.100,192.168.${num_vm}.100 --dst-ips=192.168.${num_vm}.100,192.168.0.100 --flow-mods=src-ip --traffic-generator=moongen-txrx --devices=${traffic_gen_src_slot},${traffic_gen_dst_slot} --vlan-ids=${data_vlan_start},$((data_vlan_start+num_vm)) --search-runtime=${search_runtime} --validation-runtime=${validation_runtime} --max-loss-pct=${traffic_loss_pct} --dst-macs=$mac1,$mac2 >> start-pbench-trafficgen
+else
+  echo pbench-trafficgen --config="pbench-trafficgen" --num-flows=128 --traffic-directions=bidirec --src-ips=192.168.0.100,192.168.${num_vm}.100 --dst-ips=192.168.${num_vm}.100,192.168.0.100 --flow-mods=src-ip --traffic-generator=moongen-txrx --devices=${traffic_gen_src_slot},${traffic_gen_dst_slot} --vlan-ids=${data_vlan_start},$((data_vlan_start+num_vm)) --search-runtime=${search_runtime} --validation-runtime=${validation_runtime} --max-loss-pct=${traffic_loss_pct} >> start-pbench-trafficgen
+fi
 

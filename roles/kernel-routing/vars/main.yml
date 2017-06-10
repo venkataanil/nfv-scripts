@@ -1,0 +1,3 @@
+dpdk_slot_1: 000:04.0
+dpdk_slot_2: 000:05.0
+kernel_net_driver: virtio-pci

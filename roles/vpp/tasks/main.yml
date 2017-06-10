@@ -1,0 +1,51 @@
+---
+- name: update yum repo for vpp
+  copy:
+    src: files/fdio.repo
+    dest: /etc/yum.repos.d/fdio.repo
+    owner: root
+    group: root
+- name: insall vpp
+  yum:
+    name: vpp
+    state: present
+- name: update vpp config file
+  copy:
+    src: files/startup.conf
+    dest: /etc/vpp/startup.conf
+    owner: bin
+    group: bin
+- name: config hostname and VPP routing
+  shell: |
+    screen -X -S testpmd quit
+    myhostname={{ inventory_hostname }}
+    systemctl stop NetworkManager
+    hostname $myhostname
+    num=$(echo $myhostname | sed -r -n "s/demo([0-9]+)/\1/p")
+    max={{ vm_num }}
+    modprobe uio_pci_generic
+    dpdk-devbind -u 00:04.0 00:05.0 
+    dpdk-devbind -b uio_pci_generic 00:04.0 00:05.0 
+    systemctl stop vpp; systemctl start vpp
+    vppctl set interface state GigabitEthernet0/4/0 up
+    vppctl set interface state GigabitEthernet0/5/0 up
+    vppctl set interface ip address GigabitEthernet0/4/0 192.168.$((num-1)).$num/24
+    vppctl set interface ip address GigabitEthernet0/5/0 192.168.$num.$num/24
+    for (( j=0; j<=max; j++ ))
+    do
+      if (( j < num-1 )); then
+        vppctl ip route add 192.168.$j.0/24  via 192.168.$((num - 1)).$((num - 1)) GigabitEthernet0/4/0
+      fi
+      if (( j > num )); then
+         vppctl ip route add 192.168.$j.0/24 via 192.168.$num.$((num + 1)) GigabitEthernet0/5/0
+      fi
+    done
+    if ((num % 2)); then
+      vppctl set ip arp static GigabitEthernet0/4/0 192.168.$((num-1)).100 {{ traffic_src_mac }}
+      vppctl set ip arp static GigabitEthernet0/5/0 192.168.$num.100 {{ traffic_dst_mac }}
+    else
+      vppctl set ip arp static GigabitEthernet0/4/0 192.168.$((num-1)).100 {{ traffic_dst_mac }}
+      vppctl set ip arp static GigabitEthernet0/5/0 192.168.$num.100 {{ traffic_src_mac }}
+    fi
+
+

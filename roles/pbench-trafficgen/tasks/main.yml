@@ -1,0 +1,7 @@
+---
+
+# this need to be done after pbench rpm installed
+- name: copy pbench-trafficgen files
+  shell: 
+    wget -O /opt/pbench-agent/bench-scripts/pbench-trafficgen https://github.com/atheurer/pbench/blob/trafficgen/agent/bench-scripts/pbench-trafficgen
+    wget -O /opt/pbench-agent/bench-scripts/postprocess/trafficgen-postprocess  https://github.com/atheurer/pbench/blob/trafficgen/agent/bench-scripts/postprocess/trafficgen-postprocess

@@ -1,0 +1,7 @@
+---
+- name: update authorized_key for root
+  shell: |
+    > /root/.ssh/authorized_keys
+    echo "{{ stack_key }}" >> /root/.ssh/authorized_keys
+    echo "{{ root_key }}" >> /root/.ssh/authorized_keys
+ 

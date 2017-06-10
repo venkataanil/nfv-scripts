@@ -1,0 +1,21 @@
+---
+# tempoary fix before build a new VM image with these boot args 
+- name: update tuned and isolcpu boot parameter
+  shell: |
+    grubby --update-kernel=`grubby --default-kernel` --args="default_hugepagesz=1G hugepagesz=1G hugepages=1 isolcpus=2-5"
+    sed -i -r '/^isolated_cores/d' /etc/tuned/cpu-partitioning-variables.conf
+    echo isolated_cores=2-5 >> /etc/tuned/cpu-partitioning-variables.conf
+    tuned-adm profile cpu-partitioning
+- name: reboot and get a clean start
+  shell: "nohup sh -c '( sleep 5 ; shutdown -r now )' &"
+  async: 0
+  poll: 0
+  ignore_errors: true
+- name: Wait for Machine Ready
+  local_action:
+    module: wait_for
+    host: "{{inventory_hostname}}"
+    port: 22
+    delay: 10
+    timeout: 90
+

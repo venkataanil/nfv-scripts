@@ -1,0 +1,32 @@
+---
+- name: config hostname and kernel routing
+  shell: |
+    myhostname={{ inventory_hostname }}
+    systemctl stop NetworkManager
+    hostname $myhostname
+    num=$(echo $myhostname | sed -r -n "s/demo([0-9]+)/\1/p")
+    dpdk-devbind -u {{dpdk_slot_1}} {{dpdk_slot_2}}
+    dpdk-devbind -b {{kernel_net_driver}} {{dpdk_slot_1}} {{dpdk_slot_2}}
+    ip add add 192.168.$(($num - 1)).$num/24 dev eth1
+    ip add add 192.168.$num.$num/24 dev eth2
+    ip link set up dev eth1
+    ip link set up dev eth2
+    max={{ vm_num }}
+    for (( j=0; j<=max; j++ ))
+    do
+      if (( j < num-1 )); then
+        route add -net 192.168.$j.0 netmask 255.255.255.0 gw 192.168.$((num - 1)).$((num - 1))
+      fi
+      if (( j > num )); then
+        route add -net 192.168.$j.0 netmask 255.255.255.0 gw 192.168.$num.$((num + 1))
+      fi
+    done
+    if ((num % 2)); then
+      arp -s 192.168.$((num-1)).100 {{ traffic_src_mac }}
+      arp -s 192.168.$num.100 {{ traffic_dst_mac }}
+    else
+      arp -s 192.168.$((num-1)).100 {{ traffic_dst_mac }}
+      arp -s 192.168.$num.100 {{ traffic_src_mac }}
+    fi
+    /bin/true
+

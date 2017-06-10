@@ -1,0 +1,18 @@
+---
+- name: running testpmd in screen
+  shell: |
+    systemctl stop vpp
+    screen -X -S testpmd quit 
+    myhostname={{ inventory_hostname }}
+    systemctl stop NetworkManager
+    hostname $myhostname
+    modprobe uio_pci_generic
+    dpdk-devbind -u 00:04.0 00:05.0 
+    dpdk-devbind -b uio_pci_generic 00:04.0 00:05.0 
+    testpmd_cmd="testpmd -l 0,2,4 --socket-mem 1024 -n 4 --proc-type auto \
+                 --file-prefix pg -w 00:04.0 -w 00:05.0 \
+                 -- --nb-cores=2 --nb-ports=2 --portmask=3  --auto-start \
+                 --rxq=1 --txq=1 --rxd=256 --txd=256 >/tmp/testpmd"
+    screen -dmS testpmd bash -c "$testpmd_cmd"
+    sleep 1
+

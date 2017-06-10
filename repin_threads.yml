@@ -14,18 +14,25 @@
         fi
       when: repin_kvm_emulator|default(false)|bool
     - name: move pmd threads for hyper threading
-      shell: | 
+      shell: |
+        pmd_vm_eth0={{pmd_vm_eth0}}
+        pmd_vm_eth1={{pmd_vm_eth1}}
+        pmd_vm_eth2={{pmd_vm_eth2}}
+        pmd_dpdk0={{pmd_dpdk0}}
+        pmd_dpdk1={{pmd_dpdk1}}
+        pmd_dpdk2={{pmd_dpdk2}}
+ 
         declare -a vnic
         instance=$(virsh list | grep running | awk '{print $2}')
         n=0
-        for name in $(virsh dumpxml $instance | grep openvswitch | awk -F\' '{print $4}'| sed -r -n "1s/.*openvswitch\/(.*)/\1/p"); do
+        for name in $(virsh dumpxml $instance | grep openvswitch | awk -F\' '{print $4}'| sed -r -n "s/.*openvswitch\/(.*)/\1/p"); do
           vnic[$n]=$name
           n=$((n+1))
         done
         if ((n>=1)); then
           for i in $(seq $n); do
-            ovs-vsctl set Interface dpdk$((i-1)) other_config:pmd-rxq-affinity=0:$(eval \$pmd_dpdk$((i-1)))
-            ovs-vsctl set Interface ${vnic[((i-1))]} other_config:pmd-rxq-affinity=0:$(eval \$pmd_vm_eth$((i-1)))
+            ovs-vsctl set Interface dpdk$((i-1)) other_config:pmd-rxq-affinity=0:$(eval echo \$pmd_dpdk$((i-1)))
+            ovs-vsctl set Interface ${vnic[((i-1))]} other_config:pmd-rxq-affinity=0:$(eval echo \$pmd_vm_eth$((i-1)))
           done
         fi
       when: repin_ovs_pmd|default(false)|bool

@@ -1,0 +1,21 @@
+---
+    
+- hosts: computes
+  become: true
+  roles:
+    - { role: pbench, when: run_pbench == "yes" }
+
+- hosts: VMs
+  become: true
+  roles:
+    - { role: pbench, when: run_pbench == "yes" }
+    - { role: nfv-common }
+    - { role: vpp, when: routing == "vpp" }
+    - { role: testpmd, when: routing != "vpp" }
+
+- hosts: director
+  become: true
+  roles:
+    - { role: pbench, when: run_pbench == "yes" }
+    - { role: pbench-trafficgen, when: run_pbench == "yes" } 
+

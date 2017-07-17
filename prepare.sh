@@ -1,5 +1,6 @@
 #/bin/bash
 # create n Vms, n specified by the first augument
+set -x
 
 error ()
 {
@@ -17,6 +18,26 @@ function get_vm_mac() {
   echo $mac
 }
 
+function start_instance() {
+# arg1: instance name 
+# arg2: provider 1 port-id
+# arg3: provider 2 port-id
+# arg4: access port-id
+  local name=$1
+  local id1=$2
+  local id2=$3
+  local id3=$4
+  if [[ -z "$user_data" ]]; then
+    nova boot --flavor nfv --image ${vm_image_name} --nic port-id=$id3 --nic port-id=$id1 --nic port-id=$id2 --key-name demo-key $name 
+  else
+    nova boot --flavor nfv --image ${vm_image_name} --nic port-id=$id3 --nic port-id=$id1 --nic port-id=$id2 --key-name demo-key --user-data $user_data $name 
+  fi
+  if [[ $? -ne 0 ]]; then
+    echo nova boot failed
+    exit 1
+  fi
+  echo instance $name started
+}
 
 if [ ! -f nfv_test.cfg ]; then
   error "nfv_test.cfg can't be found"
@@ -32,6 +53,30 @@ nova quota-update --cores $(( $num_vm * 6 )) $project_id
 neutron quota-update --tenant_id $project_id --network $(( $num_vm + 2 ))
 neutron quota-update --tenant_id $project_id --subnet $(( $num_vm + 2 ))
 
+if [ ! -d ${nfv_tmp_dir} ]; then
+  echo "directory ${nfv_tmp_dir} not exits, creating"
+  mkdir -p ${nfv_tmp_dir} || error "failed to create ${nfv_tmp_dir}"
+fi
+
+#download image if it not exits on local directory
+vm_image_file="${nfv_tmp_dir}/${vm_image_file}"
+if [ -f ${vm_image_file} ]; then
+  echo "found image ${vm_image_file}"
+else 
+  echo "image ${vm_image_file} not found, downloading"
+  wget $vm_image_url -O ${vm_image_file} || error "failed to download image"
+fi
+
+#modify image to use persistent interface naming
+virt-edit -a ${vm_image_file} -e "s/net.ifnames=0/net.ifnames=1/g" /boot/grub2/grub.cfg || error "virt-edit failed"
+
+#assume vm dhco port is always ens3
+#it is ok the move fails in case this is not a new it was moved before
+virt-customize -a ${vm_image_file} --run-command "mv /etc/sysconfig/network-scripts/ifcfg-eth0 /etc/sysconfig/network-scripts/ifcfg-ens3" 2>/dev/null
+#but if the following fail then we have to bail out
+virt-edit -a ${vm_image_file} -e "s/eth0/ens3/g" /etc/sysconfig/network-scripts/ifcfg-ens3 || error "virt-edit failed"
+# at this time, virt-cat and virt-ls can be used to doublecheck the change we made on the image
+
 if ! openstack image list | grep ${vm_image_name}; then
   openstack image create --disk-format qcow2 --container-format bare   --public --file ${vm_image_file} ${vm_image_name} || error "failed to create image" 
 fi
@@ -40,14 +85,19 @@ nova keypair-list | grep 'demo-key' || nova keypair-add --pub-key ~/.ssh/id_rsa.
 openstack security group rule list | grep 22:22 || openstack security group rule create default --protocol tcp --dst-port 22:22 --src-ip 0.0.0.0/0
 openstack security group rule list | grep icmp || openstack security group rule create default --protocol icmp
 
-if ! openstack flavor list | grep nfv; then 
-  openstack flavor create nfv --id 1 --ram 4096 --disk 20 --vcpus 6
-  nova flavor-key 1 set hw:cpu_policy=dedicated
-  nova flavor-key 1 set hw:mem_page_size=1GB
+# to make sure the other HT sibling not used by instance, an alternative, might be used hw:cpu_thread_policy=isolate, --vcpus 3 (rather than 6)
+if openstack flavor list | grep nfv; then
+  openstack flavor delete nfv
 fi
+openstack flavor create nfv --id 1 --ram 4096 --disk 20 --vcpus 6
 
-if [[ ${enable_HT} == "true" ]]; then
-  nova flavor-key 1 set hw:cpu_thread_policy=prefer
+if [[ ${vnic_type} == "sriov" ]]; then
+  nova flavor-key 1 set hw:cpu_policy=dedicated hw:mem_page_size=1GB hw:numa_nodes=1 hw:numa_mempolicy=preferred hw:numa_cpus.0=0,1,2,3,4,5 hw:numa_mem.0=4096
+else   
+  nova flavor-key 1 set hw:cpu_policy=dedicated hw:mem_page_size=1GB
+  if [[ ${enable_HT} == "true" ]]; then
+    nova flavor-key 1 set hw:cpu_thread_policy=prefer
+  fi
 fi
 
 if [[ ${enable_multi_queue} == "true" ]]; then
@@ -62,93 +112,57 @@ if ! neutron net-list | grep access; then
 fi
 
 for i in $(eval echo "{0..$num_vm}"); do
-  neutron net-create provider-nfv$i --provider:network_type vlan --provider:physical_network dpdk$(($i % 2)) --provider:segmentation_id $((100 + $i)) --port_security_enabled=False
-  sleep 1
+  if [[ ${vnic_type} == "sriov" ]]; then
+    neutron net-create provider-nfv$i --provider:network_type vlan --provider:physical_network sriov$((i % 2 + 1)) --provider:segmentation_id $((100 + $i)) --port_security_enabled=False
+  else 
+    neutron net-create provider-nfv$i --provider:network_type vlan --provider:physical_network dpdk$(($i % 2)) --provider:segmentation_id $((100 + $i)) --port_security_enabled=False
+  fi
   neutron subnet-create --name provider-nfv$i --disable-dhcp --gateway 192.168.$i.254 provider-nfv$i 192.168.$i.0/24
 done
 
+
 neutron net-list > tmpfile
-access=$(cat tmpfile | grep access | awk -F'|' '{print $2}' | awk '{print $1}')
-declare -a providers
+#access=$(cat tmpfile | grep access | awk -F'|' '{print $2}' | awk '{print $1}')
 declare -a vmState
-declare -a retries
-declare -a duration
-declare -a port
 
 for i in $(eval echo "{1..$num_vm}"); do
-  provider1=$(cat tmpfile | grep provider-nfv$((i - 1)) | awk -F'|' '{print $2}' | awk '{print $1}')
-  provider2=$(cat tmpfile | grep provider-nfv$i | awk -F'|' '{print $2}' | awk '{print $1}')
-  echo excuting "nova boot --flavor nfv --image ${vm_image_name} --nic net-id=$access --nic net-id=$provider1 --nic net-id=$provider2 --key-name demo-key demo$i"
-    nova boot --flavor nfv --image ${vm_image_name} --nic net-id=$access --nic net-id=$provider1 --nic net-id=$provider2 --key-name demo-key demo$i
-  if [[ $? -ne 0 ]]; then
-    echo "VM start immediately failed"
-    nova show demo$i 
-    exit 1
+  if [[ ${vnic_type} == "sriov" ]]; then
+    vnic_option="--vnic-type direct"
+  else 
+    vnic_option=""
   fi
-  echo "demo$i started, wait for active status"
-  providers[$((i-1))]=$provider1
-  providers[$i]=$provider2
+  provider1=$(openstack port create --network provider-nfv$((i - 1)) ${vnic_option} nfv$((i - 1))-port | awk '/ id/ {print $4}')
+  provider2=$(openstack port create --network provider-nfv$i ${vnic_option} nfv$i-port | awk '/ id/ {print $4}')
+  access=$(openstack port create --network access access-port-$i | awk '/ id/ {print $4}')
+  start_instance demo$i $provider1 $provider2 $access
   vmState[$i]=0
-  retries[$i]=0
-  duration[$i]=0
 done
 
-# check to make sure all VM complete with ACTIVE
 for n in {0..1000}; do
   sleep 3
   nova list > tmpfile
   completed=1
+  errored=0
   for i in $(eval echo "{1..$num_vm}"); do
     if [ ${vmState[$i]} -ne 1 ]; then
       if grep demo$i tmpfile | egrep 'ACTIVE'; then
         vmState[$i]=1
       elif grep demo$i tmpfile | egrep 'ERROR'; then
-        completed=0
-        nova show demo$i
-        if [ ${retries[$i]} -lt 10 ]; then
-          intcount=0
-          for pID in $(nova interface-list demo$i | egrep '10.1|192.168' | awk -F'|' '{print $3}' | awk '{print $1}'); do
-            port[$intcount]=$pID
-            ((++intcount))
-          done
-          nova delete demo$i
-          sleep 2
-          for ((k=0; k<$intcount; k++)); do
-            neutron port-delete ${port[$k]} 2>/dev/null
-            sleep 1
-          done
-          nova boot --flavor nfv --image ${vm_image_name} --nic net-id=$access --nic net-id=${providers[((i-1))]} --nic net-id=${providers[$i]} --key-name demo-key demo$i
-          ((++retries[$i]))
-          duration[$i]=0
-        else
-          echo failed to start instance demo$i for ${retries[$i]} times
-          exit 1
-        fi
+        errored=1
+        break
       else
         completed=0
-        ((++duration[$i]))
-        if [ ${duration[$i]} -gt 200 ]; then
-        # this instance took 600s not completed, let's kill and restart it
-          intcount=0
-          for pID in $(nova interface-list demo$i | egrep '10.1|192.168' | awk -F'|' '{print $3}' | awk '{print $1}'); do
-            port[$intcount]=$pID
-            ((++intcount))
-          done
-          nova delete demo$i
-          sleep 2
-          for ((k=0; k<$intcount; k++)); do
-            neutron port-delete ${port[$k]} 2>/dev/null
-            sleep 1
-          done
-          nova boot --flavor nfv --image ${vm_image_name} --nic net-id=$access --nic net-id=${providers[((i-1))]} --nic net-id=${providers[$i]} --key-name demo-key demo$i
-        fi
       fi
     fi
   done
-  if [ $completed -eq 1 ]; then
+  if (( $completed || $errored )); then
     break
   fi
 done
+
+if (( $errored )); then
+  completed=0 
+fi
 
 if [ $completed -ne 1 ]; then
   echo failed to start all the instances
@@ -236,9 +250,17 @@ for host in computes controllers VMs; do
   fi
 done
 
+if [[ $vnic_type == "sriov" ]]; then
+  ansible-playbook -i nodes repin_threads.yml --extra-vars "repin_kvm_emulator=${repin_kvm_emulator}" || error "failed to repin thread"
+else
+  ansible-playbook -i nodes repin_threads.yml --extra-vars "repin_ovs_nonpmd=${repin_ovs_nonpmd} repin_kvm_emulator=${repin_kvm_emulator} repin_ovs_pmd=${repin_ovs_pmd} pmd_vm_eth0=${pmd_vm_eth0} pmd_vm_eth1=${pmd_vm_eth1} pmd_vm_eth2=${pmd_vm_eth2} pmd_dpdk0=${pmd_dpdk0} pmd_dpdk1=${pmd_dpdk1} pmd_dpdk2=${pmd_dpdk2}" || error "failed to repin thread"
+fi
 
-ansible-playbook -i nodes repin_threads.yml --extra-vars "repin_ovs_nonpmd=${repin_ovs_nonpmd} repin_kvm_emulator=${repin_kvm_emulator} repin_ovs_pmd=${repin_ovs_pmd} pmd_vm_eth0=${pmd_vm_eth0} pmd_vm_eth1=${pmd_vm_eth1} pmd_vm_eth2=${pmd_vm_eth2} pmd_dpdk0=${pmd_dpdk0} pmd_dpdk1=${pmd_dpdk1} pmd_dpdk2=${pmd_dpdk2}" || error "failed to repin thread"
+if [[ $vnic_type == "sriov" ]]; then
+  exit 0
+fi
 
+sleep 60
 ansible-playbook -i nodes nfv.yml --extra-vars "run_pbench=${run_pbench} traffic_src_mac=${traffic_src_mac} traffic_dst_mac=${traffic_dst_mac} routing=${routing}" || error "failed to run NFV application"
 
 

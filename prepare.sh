@@ -44,7 +44,75 @@ if [ ! -f nfv_test.cfg ]; then
 fi
 source nfv_test.cfg
 
+# if user-data is required for cloud-init, we need to build the mime first
+if [[ ! -z "${user_data}" ]]; then
+  [ -f create_mime.py ] && [ -f post-boot.sh ] && [ -f cloud-config ] || error "The following files are required: create_mime.py post-boot.sh cloud-config" 
+  ./create_mime.py cloud-config:text/cloud-config post-boot.sh:text/x-shellscript > ${user_data} || error "failed to create user-data for cloud-init"
+fi
+
 source /home/stack/overcloudrc || error "can't load overcloudrc"
+
+if ! openstack image list | grep ${vm_image_name}; then
+  #glance has no such an image listed, we need to upload it to glance
+  #does the local image directory exists
+  if [ ! -d ${nfv_tmp_dir} ]; then
+    echo "directory ${nfv_tmp_dir} not exits, creating"
+    mkdir -p ${nfv_tmp_dir} || error "failed to create ${nfv_tmp_dir}"
+  fi
+
+  #download image if it not exits on local directory
+  vm_image_file="${nfv_tmp_dir}/${vm_image_file}"
+  if [ -f ${vm_image_file} ]; then
+    echo "found image ${vm_image_file}"
+    # for existing cashed image we assume it is already processed
+    fresh_image="false"
+  else 
+    echo "image ${vm_image_file} not found, fetching"
+    # is the url pointing to local directory?
+    if [[ "$vm_image_url" =~ ^https?: ]]; then
+      wget $vm_image_url -O ${vm_image_file} || error "failed to download image"
+    elif [[ -f $vm_image_url ]]; then
+      cp $vm_image_url ${vm_image_file}
+    else
+      error "invalid url: $vm_image_url"
+    fi
+    fresh_image="true"
+  fi
+
+  # only process the image if it is fresh
+  if [[ ${fresh_image} == "true" ]]; then
+    #modify image to use persistent interface naming
+    virt-edit -a ${vm_image_file} -e "s/net.ifnames=0/net.ifnames=1/g" /boot/grub2/grub.cfg || error "virt-edit failed"
+
+    #assume vm dhco port is always ens3
+    #it is ok the move fails in case this is not a new it was moved before
+    virt-customize -a ${vm_image_file} --run-command "mv /etc/sysconfig/network-scripts/ifcfg-eth0 /etc/sysconfig/network-scripts/ifcfg-ens3" 2>/dev/null
+    #but if the following fail then we have to bail out
+    virt-edit -a ${vm_image_file} -e "s/eth0/ens3/g" /etc/sysconfig/network-scripts/ifcfg-ens3 || error "virt-edit failed"
+    # at this time, virt-cat and virt-ls can be used to doublecheck the change we made on the image
+
+    # set up password for console logon, this can be done in cloud init as well
+    virt-customize -a ${vm_image_file} --root-password password:password
+    virt-customize -a ${vm_image_file} --password cloud-user:password
+    virt-edit -a ${vm_image_file} -e "s/^UseDNS.*//g" /etc/ssh/sshd_config
+    virt-customize -a ${vm_image_file} --run-command "echo 'UseDNS no' >> /etc/ssh/sshd_config"
+      # need to have a way to pass root-keys to cloud-init 
+    virt-customize -a ${vm_image_file} --upload /home/stack/.ssh/id_rsa.pub:/tmp/stack_key
+    root_key=$(sudo cat /root/.ssh/id_rsa.pub)
+    virt-customize -a ${vm_image_file} --write /tmp/root_key:"$root_key" 
+
+    # we could disable cloud-init and only use ansible
+    #virt-customize -a ${vm_image_file} --link /dev/null:/etc/systemd/system/cloud-init.service
+
+    # the following only works if cloud-init is disabled, leave it to cloud-init or ansible
+    #virt-customize -a ${vm_image_file} --mkdir /root/.ssh 2>/dev/null
+    #virt-customize -a ${vm_image_file} --upload /home/stack/.ssh/id_rsa.pub:/root/.ssh/authorized_keys || error "virt-customize failed"
+    #sudo virt-customize -a ${vm_image_file} --upload /root/.ssh/id_rsa.pub:/root/.ssh/authorized_keys || error "virt-customize failed"
+
+  fi
+  # done with image process
+  openstack image create --disk-format qcow2 --container-format bare   --public --file ${vm_image_file} ${vm_image_name} || error "failed to create image" 
+fi
 
 #update nova quota to allow more core use and more network
 project_id=$(openstack project show -f value -c id admin)
@@ -52,34 +120,6 @@ nova quota-update --instances $num_vm $project_id
 nova quota-update --cores $(( $num_vm * 6 )) $project_id
 neutron quota-update --tenant_id $project_id --network $(( $num_vm + 2 ))
 neutron quota-update --tenant_id $project_id --subnet $(( $num_vm + 2 ))
-
-if [ ! -d ${nfv_tmp_dir} ]; then
-  echo "directory ${nfv_tmp_dir} not exits, creating"
-  mkdir -p ${nfv_tmp_dir} || error "failed to create ${nfv_tmp_dir}"
-fi
-
-#download image if it not exits on local directory
-vm_image_file="${nfv_tmp_dir}/${vm_image_file}"
-if [ -f ${vm_image_file} ]; then
-  echo "found image ${vm_image_file}"
-else 
-  echo "image ${vm_image_file} not found, downloading"
-  wget $vm_image_url -O ${vm_image_file} || error "failed to download image"
-fi
-
-#modify image to use persistent interface naming
-virt-edit -a ${vm_image_file} -e "s/net.ifnames=0/net.ifnames=1/g" /boot/grub2/grub.cfg || error "virt-edit failed"
-
-#assume vm dhco port is always ens3
-#it is ok the move fails in case this is not a new it was moved before
-virt-customize -a ${vm_image_file} --run-command "mv /etc/sysconfig/network-scripts/ifcfg-eth0 /etc/sysconfig/network-scripts/ifcfg-ens3" 2>/dev/null
-#but if the following fail then we have to bail out
-virt-edit -a ${vm_image_file} -e "s/eth0/ens3/g" /etc/sysconfig/network-scripts/ifcfg-ens3 || error "virt-edit failed"
-# at this time, virt-cat and virt-ls can be used to doublecheck the change we made on the image
-
-if ! openstack image list | grep ${vm_image_name}; then
-  openstack image create --disk-format qcow2 --container-format bare   --public --file ${vm_image_file} ${vm_image_name} || error "failed to create image" 
-fi
 
 nova keypair-list | grep 'demo-key' || nova keypair-add --pub-key ~/.ssh/id_rsa.pub demo-key
 openstack security group rule list | grep 22:22 || openstack security group rule create default --protocol tcp --dst-port 22:22 --src-ip 0.0.0.0/0
@@ -169,7 +209,6 @@ if [ $completed -ne 1 ]; then
   exit 1
 fi
 
-
 # update /etc/hosts entry with instances
 echo "update /etc/hosts entry with instance names"
 sudo sed -i -r '/vm/d' /etc/hosts
@@ -181,14 +220,13 @@ echo "record all nodes access info for ansible"
 echo "[VMs]" > nodes 
 nova list | sed -n -r 's/.*(demo[0-9]+).*access=([.0-9]+).*/\1 ansible_host=\2/ p' >> nodes
 
-vm_num=$(nova list | grep demo | wc -l)
-
 cat <<EOF >>nodes
 [VMs:vars]
 ansible_connection=ssh 
-ansible_user=root 
-ansible_ssh_pass=100yard-
-vm_num=${vm_num}
+ansible_user=cloud-user
+ansible_ssh_pass=redhat
+ansible_become=true
+vm_num=${num_vm}
 EOF
 
 source /home/stack/stackrc || error "can't load stackrc"
@@ -207,11 +245,16 @@ ansible_user=heat-admin
 ansible_become=true
 EOF
 
+# give 60 sec to cloud-init to complete
+if [[ ! -z "${user_data}" ]]; then
+  sleep 60
+fi
+
 # check all VM are reachable by ping
 # try 30 times
 for n in $(seq 30); do
   reachable=1
-  for i in $(seq $vm_num); do
+  for i in $(seq $num_vm); do
     ping -q -c5 demo$i || reachable=0
   done
   if [ $reachable -eq 1 ]; then
@@ -225,7 +268,7 @@ done
 # make sure remote ssh port is open
 for n in $(seq 30); do
   reachable=1
-  for i in $(seq $vm_num); do
+  for i in $(seq $num_vm); do
      timeout 1 bash -c "cat < /dev/null > /dev/tcp/demo$i/22" || reachable=0
   done
   if [ $reachable -eq 1 ]; then
@@ -236,9 +279,15 @@ done
 
 [ $reachable -eq 1 ] || error "not all VM ssh port open"
 
-# upload ssh key to all nodes 
+# upload ssh key to all nodes. if cloud-init user-data is supplied, no need to update VMs 
 echo "update authorized ssh key on nodes"
-for host in computes controllers VMs; do
+if [[ -z "${user_data}" ]]; then
+  groups=(computes controllers VMs)
+else
+  groups=(computes controllers)
+fi
+
+for host in ${groups[@]}; do
   if [[ "$USER" == "stack" ]]; then
     ANSIBLE_HOST_KEY_CHECKING=False UserKnownHostsFile=/dev/null ansible $host -i nodes -m shell -a "> /root/.ssh/authorized_keys; echo $(sudo cat /home/stack/.ssh/id_rsa.pub) >> /root/.ssh/authorized_keys; echo $(sudo cat /root/.ssh/id_rsa.pub) >> /root/.ssh/authorized_keys"
     ANSIBLE_HOST_KEY_CHECKING=False UserKnownHostsFile=/dev/null ansible $host -i nodes -m lineinfile -a "name=/etc/ssh/sshd_config regexp='^UseDNS' line='UseDNS no'"
@@ -256,11 +305,6 @@ else
   ansible-playbook -i nodes repin_threads.yml --extra-vars "repin_ovs_nonpmd=${repin_ovs_nonpmd} repin_kvm_emulator=${repin_kvm_emulator} repin_ovs_pmd=${repin_ovs_pmd} pmd_vm_eth0=${pmd_vm_eth0} pmd_vm_eth1=${pmd_vm_eth1} pmd_vm_eth2=${pmd_vm_eth2} pmd_dpdk0=${pmd_dpdk0} pmd_dpdk1=${pmd_dpdk1} pmd_dpdk2=${pmd_dpdk2}" || error "failed to repin thread"
 fi
 
-if [[ $vnic_type == "sriov" ]]; then
-  exit 0
-fi
-
-sleep 60
 ansible-playbook -i nodes nfv.yml --extra-vars "run_pbench=${run_pbench} traffic_src_mac=${traffic_src_mac} traffic_dst_mac=${traffic_dst_mac} routing=${routing}" || error "failed to run NFV application"
 
 
@@ -269,12 +313,16 @@ if [[ $traffic_loss_pct != 0 ]]; then
   echo $PWD/start_pbench.sh > start-pbench-trafficgen
 fi
 
+source $overcloudrc
+mac1=`get_vm_mac demo1 provider-nfv0`
+mac2=`get_vm_mac demo${num_vm} provider-nfv${num_vm}`
 if [[ $routing == "vpp" ]]; then
-  source $overcloudrc
-  mac1=`get_vm_mac demo1 provider-nfv0`
-  mac2=`get_vm_mac demo${num_vm} provider-nfv${num_vm}`
   echo pbench-trafficgen --config="pbench-trafficgen" --num-flows=128 --traffic-directions=bidirec --src-ips=192.168.0.100,192.168.${num_vm}.100 --dst-ips=192.168.${num_vm}.100,192.168.0.100 --flow-mods=src-ip --traffic-generator=moongen-txrx --devices=${traffic_gen_src_slot},${traffic_gen_dst_slot} --vlan-ids=${data_vlan_start},$((data_vlan_start+num_vm)) --search-runtime=${search_runtime} --validation-runtime=${validation_runtime} --max-loss-pct=${traffic_loss_pct} --dst-macs=$mac1,$mac2 >> start-pbench-trafficgen
-else
+elif [[ $routing == "testpmd" ]]; then
   echo pbench-trafficgen --config="pbench-trafficgen" --num-flows=128 --traffic-directions=bidirec --src-ips=192.168.0.100,192.168.${num_vm}.100 --dst-ips=192.168.${num_vm}.100,192.168.0.100 --flow-mods=src-ip --traffic-generator=moongen-txrx --devices=${traffic_gen_src_slot},${traffic_gen_dst_slot} --vlan-ids=${data_vlan_start},$((data_vlan_start+num_vm)) --search-runtime=${search_runtime} --validation-runtime=${validation_runtime} --max-loss-pct=${traffic_loss_pct} >> start-pbench-trafficgen
+else
+  #echo pbench-moongen --rate=1 --dst-macs=$mac1,$mac2 --traffic=bidirec --accept-negative-loss --frame-sizes=64 --max-drop-pct=${traffic_loss_pct} --search-runtime=30 --validation-runtime=30 >> start-pbench-trafficgen
+  #use trex
+  echo pbench-trafficgen --config=pbench-trafficgen --num-flows=128 --traffic-directions=bidirec  --flow-mods=src-ip --traffic-generator=trex-txrx --devices=${traffic_gen_src_slot},${traffic_gen_dst_slot} --vlan-ids=${data_vlan_start},$((data_vlan_start+num_vm)) --search-runtime=${search_runtime} --validation-runtime=${validation_runtime} --max-loss-pct=${traffic_loss_pct} --dst-macs=$mac1,$mac2 >> start-pbench-trafficgen
 fi
 

@@ -1,0 +1,56 @@
+#!/bin/bash
+
+sendtag=$(echo "$1" | awk -F'.' '{print $2}')
+recvtag=$(echo "$2" | awk -F'.' '{print $2}')
+if [[ $sendtag != "" ]]; then
+   sendif=$(echo "$1" | awk -F'.' '{print $1}')
+   echo "xmt interface $sendif with tag $sendtag"
+   ip link add link $sendif name $sendif.$sendtag type vlan id $sendtag || exit 1
+   ip link set up $sendif
+   sendif=$sendif.$sendtag
+else
+   echo "no sending tag"
+   sendif=$1
+fi
+
+if [[ $recvtag != "" ]]; then
+   recvif=$(echo "$2" | awk -F'.' '{print $1}')
+   echo "rcv interface $recvif with tag $recvtag"
+   ip link add link $recvif name $recvif.$recvtag type vlan id $recvtag || exit 1
+   ip link set up $recvif
+   recvif=$recvif.$recvtag
+else   
+   recvif=$2
+fi
+
+ip netns delete red 2> /dev/null
+ip netns delete blue 2> /dev/null
+
+ip netns add red
+ip netns add blue
+ip link set $sendif netns red
+ip link set $recvif netns blue
+ip netns exec red ip a add 1.1.1.1/24 dev $sendif
+ip netns exec blue ip a add 1.1.1.2/24 dev $recvif
+ip netns exec red ip link set $sendif up
+ip netns exec blue ip link set $recvif up
+ping_received=$(ip netns exec red ping -c 3 -W 2 1.1.1.2 | grep received | awk '{print $4}')
+if [[ $ping_received > 0 ]]; then
+   echo success
+else
+   echo fail
+fi
+ip netns exec red ip link set $sendif netns 1
+ip netns exec blue ip link set $recvif netns 1
+sleep 1
+if [[ $sendtag != "" ]]; then
+   ip link delete $sendif
+fi
+
+if [[ $recvtag != "" ]]; then
+   ip link delete $recvif
+fi
+
+ip netns delete red
+ip netns delete blue
+

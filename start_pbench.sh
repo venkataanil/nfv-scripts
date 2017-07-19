@@ -6,7 +6,7 @@ error ()
   exit 1
 }
 
-comupte_tools=(proc-sched_debug proc-interrupts sar openvswitch iostat perf)
+comupte_tools=(proc-sched_debug proc-interrupts sar openvswitch iostat)
 vm_tools=(proc-sched_debug proc-interrupts sar iostat)
 pbench-kill-tools
 pbench-clear-tools

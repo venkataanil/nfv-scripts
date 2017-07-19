@@ -1,0 +1,10 @@
+---
+# Play:   run_role.yml
+# # Usage:  ansible-playbook -i nodes ~/ansible/run_role.yml -e "ROLE=<role>" -e "HOSTS=<n.n.n.n|host@fqdn>" 
+#
+- hosts:  '{{HOSTS}}'
+  user:   root 
+  become: true
+  roles:
+    - { role: '{{ROLE}}' }
+

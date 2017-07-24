@@ -46,7 +46,7 @@ enabled=1
 gpgcheck=0
 EOF
 
-yum remove -y tuned
+#yum remove -y tuned
 
 yum install -y screen
 
@@ -57,13 +57,13 @@ yum -y install libhugetlbfs-utils
 hugeadm --create-global-mounts
 grubby --update-kernel=`grubby --default-kernel` --args="default_hugepagesz=1G hugepagesz=1G hugepages=1 isolcpus=2-5"
 
-yum install -y tuned
+#yum install -y tuned
 yum install -y tuned-profiles-cpu-partitioning
 sed -i -r '/^isolated_cores/d' /etc/tuned/cpu-partitioning-variables.conf
 sed -i -e "\$aisolated_cores=2-5" /etc/tuned/cpu-partitioning-variables.conf
-systemctl enable tuned
-systemctl start tuned
-sleep 1
+#systemctl enable tuned
+#systemctl start tuned
+#sleep 1
 tuned-adm profile cpu-partitioning
 
 yum -y install vpp
@@ -116,6 +116,6 @@ fi
 if [[ -f /tmp/root_key ]]; then
   cat /tmp/root_key >> /root/.ssh/authorized_keys
 fi 
-sync
+#sync
 reboot
 

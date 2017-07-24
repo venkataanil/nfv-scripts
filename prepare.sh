@@ -18,6 +18,34 @@ function get_vm_mac() {
   echo $mac
 }
 
+function get_mac_from_pci_slot () {
+  #this function retrieve mac address from pci slot id. $1: slot number, $2: variable name to set the return value to
+  local slot=$1
+  local  __resultvar=$2
+  local line=$(sudo dpdk-devbind -s | grep $slot)
+  local kernel_driver
+  local mac 
+  if echo $line | grep igb; then
+    kernel_driver=igb
+  elif echo $line | grep i40; then
+    kernel_driver=i40
+  elif echo $line | grep ixgbe; then
+    kernel_driver=ixgbe
+  else
+    error "failed to find kernel driver for pci slot $slot"
+  fi
+
+  # bind it to kernel to see what its mac address
+  sudo dpdk-devbind -u $slot
+  sudo dpdk-devbind -b ${kernel_driver} $slot
+  mac=$(sudo dmesg | sed -r -n "s/.*${slot}:.*([0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2})/\1/p" | tail -1)
+  eval $__resultvar=$mac
+  # bind the port back to vfio-pci driver
+  lsmod | grep vfio_pci || modprobe vfio-pci
+  sudo dpdk-devbind -b vfio-pci $slot
+}
+
+
 function start_instance() {
 # arg1: instance name 
 # arg2: provider 1 port-id
@@ -39,18 +67,32 @@ function start_instance() {
   echo instance $name started
 }
 
-if [ ! -f nfv_test.cfg ]; then
+SCRIPT_PATH=$(dirname $0)             # relative
+SCRIPT_PATH=$(cd $SCRIPT_PATH && pwd)  # absolutized and normalized
+
+if [ ! -f ${SCRIPT_PATH}/nfv_test.cfg ]; then
   error "nfv_test.cfg can't be found"
 fi
-source nfv_test.cfg
+source ${SCRIPT_PATH}/nfv_test.cfg
+
+# this script can be called from browbeat
+# browbeat env variable browbeat_nfv_vars to over write the cfg file variables
+# example: browbeat_nfv_vars="x=a y=b z=c"
+if [[ ! -z "${browbeat_nfv_vars}" ]]; then
+  for var_set_str in ${browbeat_nfv_vars}; do
+    eval "${var_set_str}"
+  done
+fi
 
 # if user-data is required for cloud-init, we need to build the mime first
 if [[ ! -z "${user_data}" ]]; then
-  [ -f create_mime.py ] && [ -f post-boot.sh ] && [ -f cloud-config ] || error "The following files are required: create_mime.py post-boot.sh cloud-config" 
-  ./create_mime.py cloud-config:text/cloud-config post-boot.sh:text/x-shellscript > ${user_data} || error "failed to create user-data for cloud-init"
+  [ -f ${SCRIPT_PATH}/create_mime.py ] && [ -f ${SCRIPT_PATH}/post-boot.sh ] && [ -f  ${SCRIPT_PATH}/cloud-config ] || error "The following files are required: create_mime.py post-boot.sh cloud-config" 
+  # make sure user_data is a absolute path
+  [[ ${user_data} = /* ]] || user_data=${SCRIPT_PATH}/${user_data}
+  ${SCRIPT_PATH}/create_mime.py ${SCRIPT_PATH}/cloud-config:text/cloud-config ${SCRIPT_PATH}/post-boot.sh:text/x-shellscript > ${SCRIPT_PATH}/${user_data} || error "failed to create user-data for cloud-init"
 fi
 
-source /home/stack/overcloudrc || error "can't load overcloudrc"
+source ${overcloudrc} || error "can't load overcloudrc"
 
 if ! openstack image list | grep ${vm_image_name}; then
   #glance has no such an image listed, we need to upload it to glance
@@ -102,12 +144,7 @@ if ! openstack image list | grep ${vm_image_name}; then
     virt-customize -a ${vm_image_file} --write /tmp/root_key:"$root_key" 
 
     # we could disable cloud-init and only use ansible
-    #virt-customize -a ${vm_image_file} --link /dev/null:/etc/systemd/system/cloud-init.service
-
-    # the following only works if cloud-init is disabled, leave it to cloud-init or ansible
-    #virt-customize -a ${vm_image_file} --mkdir /root/.ssh 2>/dev/null
-    #virt-customize -a ${vm_image_file} --upload /home/stack/.ssh/id_rsa.pub:/root/.ssh/authorized_keys || error "virt-customize failed"
-    #sudo virt-customize -a ${vm_image_file} --upload /root/.ssh/id_rsa.pub:/root/.ssh/authorized_keys || error "virt-customize failed"
+    #virt-customize -a ${vm_image_file} --touch /etc/cloud/cloud-init.disabled
 
   fi
   # done with image process
@@ -125,10 +162,11 @@ nova keypair-list | grep 'demo-key' || nova keypair-add --pub-key ~/.ssh/id_rsa.
 openstack security group rule list | grep 22:22 || openstack security group rule create default --protocol tcp --dst-port 22:22 --src-ip 0.0.0.0/0
 openstack security group rule list | grep icmp || openstack security group rule create default --protocol icmp
 
-# to make sure the other HT sibling not used by instance, an alternative, might be used hw:cpu_thread_policy=isolate, --vcpus 3 (rather than 6)
 if openstack flavor list | grep nfv; then
   openstack flavor delete nfv
 fi
+
+# 6 vcpu to make sure the HT sibling not used by instance; an alternative, might be used hw:cpu_thread_policy=isolate, --vcpus 3 (rather than 6)
 openstack flavor create nfv --id 1 --ram 4096 --disk 20 --vcpus 6
 
 if [[ ${vnic_type} == "sriov" ]]; then
@@ -148,9 +186,10 @@ fi
 if ! neutron net-list | grep access; then
 #  neutron net-create access --provider:network_type flat  --provider:physical_network access
   neutron net-create access --provider:network_type vlan --provider:physical_network access --provider:segmentation_id 200 --port_security_enabled=False
-  neutron subnet-create --name access --dns-nameserver 10.35.28.28 access 10.1.1.0/24
+  neutron subnet-create --name access --dns-nameserver ${dns_server} access 10.1.1.0/24
 fi
 
+# the ooo templates is using sriov1/2 for data network; dpdk0/1.
 for i in $(eval echo "{0..$num_vm}"); do
   if [[ ${vnic_type} == "sriov" ]]; then
     neutron net-create provider-nfv$i --provider:network_type vlan --provider:physical_network sriov$((i % 2 + 1)) --provider:segmentation_id $((100 + $i)) --port_security_enabled=False
@@ -160,17 +199,15 @@ for i in $(eval echo "{0..$num_vm}"); do
   neutron subnet-create --name provider-nfv$i --disable-dhcp --gateway 192.168.$i.254 provider-nfv$i 192.168.$i.0/24
 done
 
-
-neutron net-list > tmpfile
-#access=$(cat tmpfile | grep access | awk -F'|' '{print $2}' | awk '{print $1}')
 declare -a vmState
 
+if [[ ${vnic_type} == "sriov" ]]; then
+  vnic_option="--vnic-type direct"
+else
+  vnic_option=""
+fi
+
 for i in $(eval echo "{1..$num_vm}"); do
-  if [[ ${vnic_type} == "sriov" ]]; then
-    vnic_option="--vnic-type direct"
-  else 
-    vnic_option=""
-  fi
   provider1=$(openstack port create --network provider-nfv$((i - 1)) ${vnic_option} nfv$((i - 1))-port | awk '/ id/ {print $4}')
   provider2=$(openstack port create --network provider-nfv$i ${vnic_option} nfv$i-port | awk '/ id/ {print $4}')
   access=$(openstack port create --network access access-port-$i | awk '/ id/ {print $4}')
@@ -178,16 +215,18 @@ for i in $(eval echo "{1..$num_vm}"); do
   vmState[$i]=0
 done
 
+tmpfile=${SCRIPT_PATH}/tmpfile
+
 for n in {0..1000}; do
   sleep 3
-  nova list > tmpfile
+  nova list > $tmpfile
   completed=1
   errored=0
   for i in $(eval echo "{1..$num_vm}"); do
     if [ ${vmState[$i]} -ne 1 ]; then
-      if grep demo$i tmpfile | egrep 'ACTIVE'; then
+      if grep demo$i $tmpfile | egrep 'ACTIVE'; then
         vmState[$i]=1
-      elif grep demo$i tmpfile | egrep 'ERROR'; then
+      elif grep demo$i $tmpfile | egrep 'ERROR'; then
         errored=1
         break
       else
@@ -205,8 +244,7 @@ if (( $errored )); then
 fi
 
 if [ $completed -ne 1 ]; then
-  echo failed to start all the instances
-  exit 1
+  error "failed to start all the instances"
 fi
 
 # update /etc/hosts entry with instances
@@ -216,11 +254,13 @@ sudo sed -i -r '/demo/d' /etc/hosts
 nova list | sudo sed -n -r 's/.*(demo[0-9]+).*access=([.0-9]+).*/\2 \1/p' | sudo tee --append /etc/hosts >/dev/null
 
 # record all VM's access info in ansible inventory file
-echo "record all nodes access info for ansible"
-echo "[VMs]" > nodes 
-nova list | sed -n -r 's/.*(demo[0-9]+).*access=([.0-9]+).*/\1 ansible_host=\2/ p' >> nodes
+nodes=${SCRIPT_PATH}/nodes
 
-cat <<EOF >>nodes
+echo "record ansible hosts access info in $nodes"
+echo "[VMs]" > $nodes 
+nova list | sed -n -r 's/.*(demo[0-9]+).*access=([.0-9]+).*/\1 ansible_host=\2/ p' >> $nodes
+
+cat <<EOF >>$nodes
 [VMs:vars]
 ansible_connection=ssh 
 ansible_user=cloud-user
@@ -229,12 +269,12 @@ ansible_become=true
 vm_num=${num_vm}
 EOF
 
-source /home/stack/stackrc || error "can't load stackrc"
-echo "[computes]" >> nodes
-nova list | sed -n -r 's/.*compute.*ctlplane=([.0-9]+).*/\1/ p' >> nodes
-echo "[controllers]" >> nodes
-nova list | sed -n -r 's/.*control.*ctlplane=([.0-9]+).*/\1/ p' >> nodes
-cat <<EOF >>nodes
+source $stackrc || error "can't load stackrc"
+echo "[computes]" >> $nodes
+nova list | sed -n -r 's/.*compute.*ctlplane=([.0-9]+).*/\1/ p' >> $nodes
+echo "[controllers]" >> $nodes
+nova list | sed -n -r 's/.*control.*ctlplane=([.0-9]+).*/\1/ p' >> $nodes
+cat <<EOF >>$nodes
 [computes:vars]
 ansible_connection=ssh
 ansible_user=heat-admin
@@ -279,8 +319,8 @@ done
 
 [ $reachable -eq 1 ] || error "not all VM ssh port open"
 
-# upload ssh key to all nodes. if cloud-init user-data is supplied, no need to update VMs 
-echo "update authorized ssh key on nodes"
+# upload ssh key to all $nodes. if cloud-init user-data is supplied, no need to update VMs 
+echo "update authorized ssh key on $nodes"
 if [[ -z "${user_data}" ]]; then
   groups=(computes controllers VMs)
 else
@@ -289,25 +329,29 @@ fi
 
 for host in ${groups[@]}; do
   if [[ "$USER" == "stack" ]]; then
-    ANSIBLE_HOST_KEY_CHECKING=False UserKnownHostsFile=/dev/null ansible $host -i nodes -m shell -a "> /root/.ssh/authorized_keys; echo $(sudo cat /home/stack/.ssh/id_rsa.pub) >> /root/.ssh/authorized_keys; echo $(sudo cat /root/.ssh/id_rsa.pub) >> /root/.ssh/authorized_keys"
-    ANSIBLE_HOST_KEY_CHECKING=False UserKnownHostsFile=/dev/null ansible $host -i nodes -m lineinfile -a "name=/etc/ssh/sshd_config regexp='^UseDNS' line='UseDNS no'"
-    ANSIBLE_HOST_KEY_CHECKING=False UserKnownHostsFile=/dev/null ansible $host -i nodes -m service -a "name=sshd state=restarted"
+    ANSIBLE_HOST_KEY_CHECKING=False UserKnownHostsFile=/dev/null ansible $host -i $nodes -m shell -a "> /root/.ssh/authorized_keys; echo $(sudo cat /home/stack/.ssh/id_rsa.pub) >> /root/.ssh/authorized_keys; echo $(sudo cat /root/.ssh/id_rsa.pub) >> /root/.ssh/authorized_keys"
+    ANSIBLE_HOST_KEY_CHECKING=False UserKnownHostsFile=/dev/null ansible $host -i $nodes -m lineinfile -a "name=/etc/ssh/sshd_config regexp='^UseDNS' line='UseDNS no'"
+    ANSIBLE_HOST_KEY_CHECKING=False UserKnownHostsFile=/dev/null ansible $host -i $nodes -m service -a "name=sshd state=restarted"
   else
-    sudo -u stack ANSIBLE_HOST_KEY_CHECKING=False UserKnownHostsFile=/dev/null ansible $host -i nodes -m shell -a "> /root/.ssh/authorized_keys; echo $(sudo cat /home/stack/.ssh/id_rsa.pub) >> /root/.ssh/authorized_keys; echo $(sudo cat /root/.ssh/id_rsa.pub) >> /root/.ssh/authorized_keys"
-    sudo -u stack ANSIBLE_HOST_KEY_CHECKING=False UserKnownHostsFile=/dev/null ansible $host -i nodes -m lineinfile -a "name=/etc/ssh/sshd_config regexp='^UseDNS' line='UseDNS no'"
-    sudo -u stack ANSIBLE_HOST_KEY_CHECKING=False UserKnownHostsFile=/dev/null ansible $host -i nodes -m service -a "name=sshd state=restarted"
+    sudo -u stack ANSIBLE_HOST_KEY_CHECKING=False UserKnownHostsFile=/dev/null ansible $host -i $nodes -m shell -a "> /root/.ssh/authorized_keys; echo $(sudo cat /home/stack/.ssh/id_rsa.pub) >> /root/.ssh/authorized_keys; echo $(sudo cat /root/.ssh/id_rsa.pub) >> /root/.ssh/authorized_keys"
+    sudo -u stack ANSIBLE_HOST_KEY_CHECKING=False UserKnownHostsFile=/dev/null ansible $host -i $nodes -m lineinfile -a "name=/etc/ssh/sshd_config regexp='^UseDNS' line='UseDNS no'"
+    sudo -u stack ANSIBLE_HOST_KEY_CHECKING=False UserKnownHostsFile=/dev/null ansible $host -i $nodes -m service -a "name=sshd state=restarted"
   fi
 done
 
 if [[ $vnic_type == "sriov" ]]; then
-  ansible-playbook -i nodes repin_threads.yml --extra-vars "repin_kvm_emulator=${repin_kvm_emulator}" || error "failed to repin thread"
+  ansible-playbook -i $nodes ${SCRIPT_PATH}/repin_threads.yml --extra-vars "repin_kvm_emulator=${repin_kvm_emulator}" || error "failed to repin thread"
 else
-  ansible-playbook -i nodes repin_threads.yml --extra-vars "repin_ovs_nonpmd=${repin_ovs_nonpmd} repin_kvm_emulator=${repin_kvm_emulator} repin_ovs_pmd=${repin_ovs_pmd} pmd_vm_eth0=${pmd_vm_eth0} pmd_vm_eth1=${pmd_vm_eth1} pmd_vm_eth2=${pmd_vm_eth2} pmd_dpdk0=${pmd_dpdk0} pmd_dpdk1=${pmd_dpdk1} pmd_dpdk2=${pmd_dpdk2}" || error "failed to repin thread"
+  ansible-playbook -i $nodes ${SCRIPT_PATH}/repin_threads.yml --extra-vars "repin_ovs_nonpmd=${repin_ovs_nonpmd} repin_kvm_emulator=${repin_kvm_emulator} repin_ovs_pmd=${repin_ovs_pmd} pmd_vm_eth0=${pmd_vm_eth0} pmd_vm_eth1=${pmd_vm_eth1} pmd_vm_eth2=${pmd_vm_eth2} pmd_dpdk0=${pmd_dpdk0} pmd_dpdk1=${pmd_dpdk1} pmd_dpdk2=${pmd_dpdk2}" || error "failed to repin thread"
 fi
 
-ansible-playbook -i nodes nfv.yml --extra-vars "run_pbench=${run_pbench} traffic_src_mac=${traffic_src_mac} traffic_dst_mac=${traffic_dst_mac} routing=${routing}" || error "failed to run NFV application"
+# get mac address from pci slot number
+get_mac_from_pci_slot ${traffic_gen_src_slot} traffic_src_mac
+get_mac_from_pci_slot ${traffic_gen_dst_slot} traffic_dst_mac
+echo traffic_src_mac=${traffic_src_mac} traffic_dst_mac=${traffic_dst_mac}
+ansible-playbook -i $nodes ${SCRIPT_PATH}/nfv.yml --extra-vars "run_pbench=${run_pbench} traffic_src_mac=${traffic_src_mac} traffic_dst_mac=${traffic_dst_mac} routing=${routing}" || error "failed to run NFV application"
 
-
+exit 1
 # prepare test script
 if [[ $traffic_loss_pct != 0 ]]; then
   echo $PWD/start_pbench.sh > start-pbench-trafficgen

@@ -8,6 +8,33 @@ error ()
   exit 1
 }
 
+function delete_nfv_instances () {
+  source ${overcloudrc} || error "can't load overcloudrc"
+  echo "delete instances"
+  for id in $(openstack server list \
+                 | egrep "demo" \
+                 | awk -F'|' '{print $2}' \
+                 | awk '{print $1}'); do
+    openstack server delete $id
+  done
+
+  echo "delete unused ports"
+  for id in $(neutron port-list | grep ip_address | egrep -v '10.1.1.1"|10.1.1.2"' | awk -F'|' '{print $2}' | awk '{print $1}'); do
+    neutron port-delete $id
+  done
+
+  echo "delete provider subnets"
+  for id in $(neutron subnet-list | grep provider | awk -F'|' '{print $2}' | awk '{print $1}'); do
+    neutron subnet-delete $id
+  done
+
+  echo "delete provider nets"
+  for id in $(neutron net-list | grep provider | awk -F'|' '{print $2}' | awk '{print $1}'); do
+    neutron net-delete $id
+  done
+
+}
+
 function get_vm_mac() {
 # arg1: vm name
 # arg2: network name
@@ -56,9 +83,9 @@ function start_instance() {
   local id2=$3
   local id3=$4
   if [[ -z "$user_data" ]]; then
-    nova boot --flavor nfv --image ${vm_image_name} --nic port-id=$id3 --nic port-id=$id1 --nic port-id=$id2 --key-name demo-key $name 
+    openstack server create --flavor nfv --image ${vm_image_name} --nic port-id="$id3" --nic port-id="$id1" --nic port-id="$id2" --key-name demo-key $name 
   else
-    nova boot --flavor nfv --image ${vm_image_name} --nic port-id=$id3 --nic port-id=$id1 --nic port-id=$id2 --key-name demo-key --user-data $user_data $name 
+    openstack server create --flavor nfv --image ${vm_image_name} --nic port-id=$id3 --nic port-id=$id1 --nic port-id=$id2 --key-name demo-key --user-data $user_data $name 
   fi
   if [[ $? -ne 0 ]]; then
     echo nova boot failed
@@ -67,9 +94,80 @@ function start_instance() {
   echo instance $name started
 }
 
+function check_input() {
+  if [ -z ${num_vm+x} ]; then
+    echo "num_vm not set, default to: 1"
+    num_vm=1
+  fi
+  if (( num_vm > 99 )); then
+    error "num_vm: ${num_vm} invalid, can not exceed 99"
+  fi
+
+  if [ -z ${num_flows+x} ]; then
+    echo "num_flows not set, default to: 128"
+    num_flows=128
+  fi
+ 
+  if [ -z ${provider_network_type+x} ]; then 
+    echo "provider_network_type not set, default to: flat"
+    provider_network_type="flat"
+  fi
+
+  if [ -z ${access_network_type+x} ]; then
+    echo "access_network_type not set, default to flat"
+    access_network_type="flat"
+  fi
+
+  if [[ ${provider_network_type} == "vlan" ]]; then
+    if [[ -z "${data_vlan_start}" ]]; then
+      echo "data_vlan_start not set, use default: 100"
+      data_vlan_start=100
+    fi
+  elif [[ ${provider_network_type} == "vxlan" ]]; then
+    if [[ -z "${data_vxlan_start}" ]]; then
+      echo "data_vxlan_start not set, use default: 100"
+      data_vxlan_start=100
+    fi
+  elif [[ ${provider_network_type} != "flat" ]]; then
+    error "invalid provider_network_type: ${provider_network_type}"
+  fi 
+
+  if [[ ${access_network_type} == "vlan" ]]; then
+    if [[ -z "${access_network_vlan}" ]]; then
+      echo "access_network_vlan not set, use default: 200"
+      access_network_vlan=200
+    fi
+  elif [[ ${access_network_type} != "flat" ]]; then
+    error "invalid access_network_type: ${access_network_type}"
+  fi
+
+  if [[ "$routing" == "testpmd" || "$routing" == "testpmd-sriov" ]]; then
+    if [[ -z ${testpmd_fwd} ]]; then
+      testpmd_fwd="io"
+    fi
+    case ${testpmd_fwd} in
+      io|mac) ;;
+      macswap)
+        traffic_direction="unidirec"
+        traffic_gen_dst_slot=${traffic_gen_src_slot}
+        ;;
+      *)
+        error "invalid testpmd fwd: ${testpmd_fwd}"i
+        ;;
+    esac
+  fi
+
+  case ${traffic_direction} in
+    bidirec|unidirec|revunidirec);;
+    *) error "invalid traffic_direction: ${traffic_direction}";;
+  esac
+}
+
+
 SCRIPT_PATH=$(dirname $0)             # relative
 SCRIPT_PATH=$(cd $SCRIPT_PATH && pwd)  # absolutized and normalized
 
+echo "##### loading nfv_test.cfg"
 if [ ! -f ${SCRIPT_PATH}/nfv_test.cfg ]; then
   error "nfv_test.cfg can't be found"
 fi
@@ -79,12 +177,22 @@ source ${SCRIPT_PATH}/nfv_test.cfg
 # browbeat env variable browbeat_nfv_vars to over write the cfg file variables
 # example: browbeat_nfv_vars="x=a y=b z=c"
 if [[ ! -z "${browbeat_nfv_vars}" ]]; then
+  echo "##### loading browbeat_nfv_vars"
   for var_set_str in ${browbeat_nfv_vars}; do
     eval "${var_set_str}"
   done
 fi
 
+# sanity check input parameters
+echo "##### sanity check input parameters" 
+check_input
+
+# delete exisitng NFV instances and cleanup networks
+echo "##### deleting existing nfv instances"
+delete_nfv_instances
+
 # if user-data is required for cloud-init, we need to build the mime first
+echo "##### building user_data for cloud-init"
 if [[ ! -z "${user_data}" ]]; then
   [ -f ${SCRIPT_PATH}/create_mime.py ] && [ -f ${SCRIPT_PATH}/post-boot.sh ] && [ -f  ${SCRIPT_PATH}/cloud-config ] || error "The following files are required: create_mime.py post-boot.sh cloud-config" 
   # make sure user_data is a absolute path
@@ -94,6 +202,7 @@ fi
 
 source ${overcloudrc} || error "can't load overcloudrc"
 
+echo "##### building instance image"
 if ! openstack image list | grep ${vm_image_name}; then
   #glance has no such an image listed, we need to upload it to glance
   #does the local image directory exists
@@ -152,27 +261,38 @@ if ! openstack image list | grep ${vm_image_name}; then
 fi
 
 #update nova quota to allow more core use and more network
+echo "##### updating project quota"
 project_id=$(openstack project show -f value -c id admin)
 nova quota-update --instances $num_vm $project_id
 nova quota-update --cores $(( $num_vm * 6 )) $project_id
 neutron quota-update --tenant_id $project_id --network $(( $num_vm + 2 ))
 neutron quota-update --tenant_id $project_id --subnet $(( $num_vm + 2 ))
 
+echo "##### adding keypair"
 nova keypair-list | grep 'demo-key' || nova keypair-add --pub-key ~/.ssh/id_rsa.pub demo-key
 openstack security group rule list | grep 22:22 || openstack security group rule create default --protocol tcp --dst-port 22:22 --src-ip 0.0.0.0/0
 openstack security group rule list | grep icmp || openstack security group rule create default --protocol icmp
 
+echo "##### deleting exisitng nfv flavor"
 if openstack flavor list | grep nfv; then
   openstack flavor delete nfv
 fi
 
 # 6 vcpu to make sure the HT sibling not used by instance; an alternative, might be used hw:cpu_thread_policy=isolate, --vcpus 3 (rather than 6)
+echo "##### creating nfv flavor"
+
 openstack flavor create nfv --id 1 --ram 4096 --disk 20 --vcpus 6
 
 if [[ ${vnic_type} == "sriov" ]]; then
-  nova flavor-key 1 set hw:cpu_policy=dedicated hw:mem_page_size=1GB hw:numa_nodes=1 hw:numa_mempolicy=preferred hw:numa_cpus.0=0,1,2,3,4,5 hw:numa_mem.0=4096
+  nova flavor-key 1 set hw:cpu_policy=dedicated \
+                        hw:mem_page_size=1GB \
+                        hw:numa_nodes=1 \
+                        hw:numa_mempolicy=preferred \
+                        hw:numa_cpus.0=0,1,2,3,4,5 \
+                        hw:numa_mem.0=4096
 else   
-  nova flavor-key 1 set hw:cpu_policy=dedicated hw:mem_page_size=1GB
+  nova flavor-key 1 set hw:cpu_policy=dedicated \
+                        hw:mem_page_size=1GB
   if [[ ${enable_HT} == "true" ]]; then
     nova flavor-key 1 set hw:cpu_thread_policy=prefer
   fi
@@ -183,20 +303,49 @@ if [[ ${enable_multi_queue} == "true" ]]; then
   openstack image set ${vm_image_name} --property hw_vif_multiqueue_enabled=true
 fi
 
+echo "##### creating instance access network"
 if ! neutron net-list | grep access; then
-#  neutron net-create access --provider:network_type flat  --provider:physical_network access
-  neutron net-create access --provider:network_type vlan --provider:physical_network access --provider:segmentation_id 200 --port_security_enabled=False
+  if [[ ${access_network_type} == "flat" ]]; then
+    neutron net-create access --provider:network_type flat \
+                              --provider:physical_network access \
+                              --port_security_enabled=False
+  else
+    neutron net-create access --provider:network_type vlan \
+                              --provider:physical_network access \
+                              --provider:segmentation_id ${access_network_vlan} \
+                              --port_security_enabled=False
+  fi
   neutron subnet-create --name access --dns-nameserver ${dns_server} access 10.1.1.0/24
 fi
 
+echo "##### creating instance provider networks"
 # the ooo templates is using sriov1/2 for data network; dpdk0/1.
 for i in $(eval echo "{0..$num_vm}"); do
-  if [[ ${vnic_type} == "sriov" ]]; then
-    neutron net-create provider-nfv$i --provider:network_type vlan --provider:physical_network sriov$((i % 2 + 1)) --provider:segmentation_id $((100 + $i)) --port_security_enabled=False
-  else 
-    neutron net-create provider-nfv$i --provider:network_type vlan --provider:physical_network dpdk$(($i % 2)) --provider:segmentation_id $((100 + $i)) --port_security_enabled=False
+  if [[ ${provider_network_type} == "flat" ]]; then
+    provider_opt="--provider:network_type flat"
+  elif [[ ${provider_network_type} == "vlan" ]]; then
+    provider_opt="--provider:network_type vlan \
+                  --provider:segmentation_id $((data_vlan_start + i))"
+  elif [[ ${provider_network_type} == "vxlan" ]]; then
+    provider_opt="--provider:network_type vxlan \
+                  --provider:segmentation_id $((data_vxlan_start + i))"
+  else
+    error "invalid provider_network_type: ${provider_network_type}"
   fi
-  neutron subnet-create --name provider-nfv$i --disable-dhcp --gateway 192.168.$i.254 provider-nfv$i 192.168.$i.0/24
+
+  if [[ ${vnic_type} == "sriov" ]]; then
+    neutron net-create provider-nfv$i ${provider_opt} \
+                                      --provider:physical_network sriov$((i % 2 + 1)) \
+                                      --port_security_enabled=False
+  else 
+    neutron net-create provider-nfv$i ${provider_opt} \
+                                      --provider:physical_network dpdk$(($i % 2)) \
+                                      --port_security_enabled=False
+  fi
+  neutron subnet-create --name provider-nfv$i \
+                        --disable-dhcp \
+                        --gateway 20.$i.0.1 \
+                        provider-nfv$i 20.$i.0.0/16
 done
 
 declare -a vmState
@@ -207,18 +356,21 @@ else
   vnic_option=""
 fi
 
+echo "##### starting instances"
 for i in $(eval echo "{1..$num_vm}"); do
   provider1=$(openstack port create --network provider-nfv$((i - 1)) ${vnic_option} nfv$((i - 1))-port | awk '/ id/ {print $4}')
   provider2=$(openstack port create --network provider-nfv$i ${vnic_option} nfv$i-port | awk '/ id/ {print $4}')
   access=$(openstack port create --network access access-port-$i | awk '/ id/ {print $4}')
+  # make sure port created complete before start the instance
   start_instance demo$i $provider1 $provider2 $access
   vmState[$i]=0
 done
 
 tmpfile=${SCRIPT_PATH}/tmpfile
 
+echo "##### waiting for instances go live"
 for n in {0..1000}; do
-  sleep 3
+  sleep 2
   nova list > $tmpfile
   completed=1
   errored=0
@@ -248,7 +400,7 @@ if [ $completed -ne 1 ]; then
 fi
 
 # update /etc/hosts entry with instances
-echo "update /etc/hosts entry with instance names"
+echo "##### update /etc/hosts entry with instance names"
 sudo sed -i -r '/vm/d' /etc/hosts
 sudo sed -i -r '/demo/d' /etc/hosts
 nova list | sudo sed -n -r 's/.*(demo[0-9]+).*access=([.0-9]+).*/\2 \1/p' | sudo tee --append /etc/hosts >/dev/null
@@ -256,7 +408,7 @@ nova list | sudo sed -n -r 's/.*(demo[0-9]+).*access=([.0-9]+).*/\2 \1/p' | sudo
 # record all VM's access info in ansible inventory file
 nodes=${SCRIPT_PATH}/nodes
 
-echo "record ansible hosts access info in $nodes"
+echo "##### record ansible hosts access info in $nodes"
 echo "[VMs]" > $nodes 
 nova list | sed -n -r 's/.*(demo[0-9]+).*access=([.0-9]+).*/\1 ansible_host=\2/ p' >> $nodes
 
@@ -266,7 +418,6 @@ ansible_connection=ssh
 ansible_user=cloud-user
 ansible_ssh_pass=redhat
 ansible_become=true
-vm_num=${num_vm}
 EOF
 
 source $stackrc || error "can't load stackrc"
@@ -292,6 +443,7 @@ fi
 
 # check all VM are reachable by ping
 # try 30 times
+echo "##### testing instances access via ping"
 for n in $(seq 30); do
   reachable=1
   for i in $(seq $num_vm); do
@@ -306,6 +458,7 @@ done
 [ $reachable -eq 1 ] || error "not all VM pingable"
 
 # make sure remote ssh port is open
+echo "##### testing instances access via ssh"
 for n in $(seq 30); do
   reachable=1
   for i in $(seq $num_vm); do
@@ -320,7 +473,7 @@ done
 [ $reachable -eq 1 ] || error "not all VM ssh port open"
 
 # upload ssh key to all $nodes. if cloud-init user-data is supplied, no need to update VMs 
-echo "update authorized ssh key on $nodes"
+echo "##### update authorized ssh key"
 if [[ -z "${user_data}" ]]; then
   groups=(computes controllers VMs)
 else
@@ -339,6 +492,7 @@ for host in ${groups[@]}; do
   fi
 done
 
+echo "##### repin threads on compute nodes"
 if [[ $vnic_type == "sriov" ]]; then
   ansible-playbook -i $nodes ${SCRIPT_PATH}/repin_threads.yml --extra-vars "repin_kvm_emulator=${repin_kvm_emulator}" || error "failed to repin thread"
 else
@@ -346,27 +500,74 @@ else
 fi
 
 # get mac address from pci slot number
+echo "##### getting mac address from pci slot number"
 get_mac_from_pci_slot ${traffic_gen_src_slot} traffic_src_mac
 get_mac_from_pci_slot ${traffic_gen_dst_slot} traffic_dst_mac
 echo traffic_src_mac=${traffic_src_mac} traffic_dst_mac=${traffic_dst_mac}
-ansible-playbook -i $nodes ${SCRIPT_PATH}/nfv.yml --extra-vars "run_pbench=${run_pbench} traffic_src_mac=${traffic_src_mac} traffic_dst_mac=${traffic_dst_mac} routing=${routing}" || error "failed to run NFV application"
 
-exit 1
-# prepare test script
-if [[ $traffic_loss_pct != 0 ]]; then
-  echo $PWD/start_pbench.sh > start-pbench-trafficgen
-fi
+echo "##### provision nfv work load"
+ansible-playbook -i $nodes ${SCRIPT_PATH}/nfv.yml --extra-vars "run_pbench=${run_pbench} traffic_src_mac=${traffic_src_mac} traffic_dst_mac=${traffic_dst_mac} routing=${routing} testpmd_fwd=${testpmd_fwd} num_vm=${num_vm}" || error "failed to run NFV application"
 
 source $overcloudrc
 mac1=`get_vm_mac demo1 provider-nfv0`
 mac2=`get_vm_mac demo${num_vm} provider-nfv${num_vm}`
+
+# prepare test script
+if [[ ${run_pbench} == "yes" ]]; then
+  echo "##### starting pbench agent"
+  ${SCRIPT_PATH}/start_pbench.sh
+fi
+
+if [[ ${run_traffic_gen} == "no" ]]; then
+  if [[ ${cleanup} == "yes" ]]; then
+    delete_nfv_instances
+  fi
+  exit 0
+fi
+
+echo "##### running traffic gen"
+opt_base="--config=${pbench_report_prefix} --samples=${samples} \
+          --frame-sizes=${data_pkt_size} --num-flows=${num_flows} \
+          --traffic-directions=${traffic_direction} \
+          --flow-mods=src-ip --traffic-generator=${traffic_gen} \
+          --devices=${traffic_gen_src_slot},${traffic_gen_dst_slot} \
+          --search-runtime=${search_runtime} \
+          --validation-runtime=${validation_runtime} \
+          --max-loss-pct=${traffic_loss_pct}"
+
+opt_mac="--dst-macs=$mac1,$mac2"
+opt_ip="--src-ips=20.0.0.100,20.${num_vm}.0.100 \
+        --dst-ips=20.${num_vm}.0.100,20.0.0.100"
+
+opt_vlan="--vlan-ids=${data_vlan_start},$((data_vlan_start+num_vm))"
+
 if [[ $routing == "vpp" ]]; then
-  echo pbench-trafficgen --config="pbench-trafficgen" --num-flows=128 --traffic-directions=bidirec --src-ips=192.168.0.100,192.168.${num_vm}.100 --dst-ips=192.168.${num_vm}.100,192.168.0.100 --flow-mods=src-ip --traffic-generator=moongen-txrx --devices=${traffic_gen_src_slot},${traffic_gen_dst_slot} --vlan-ids=${data_vlan_start},$((data_vlan_start+num_vm)) --search-runtime=${search_runtime} --validation-runtime=${validation_runtime} --max-loss-pct=${traffic_loss_pct} --dst-macs=$mac1,$mac2 >> start-pbench-trafficgen
-elif [[ $routing == "testpmd" ]]; then
-  echo pbench-trafficgen --config="pbench-trafficgen" --num-flows=128 --traffic-directions=bidirec --src-ips=192.168.0.100,192.168.${num_vm}.100 --dst-ips=192.168.${num_vm}.100,192.168.0.100 --flow-mods=src-ip --traffic-generator=moongen-txrx --devices=${traffic_gen_src_slot},${traffic_gen_dst_slot} --vlan-ids=${data_vlan_start},$((data_vlan_start+num_vm)) --search-runtime=${search_runtime} --validation-runtime=${validation_runtime} --max-loss-pct=${traffic_loss_pct} >> start-pbench-trafficgen
+   if [[ ${provider_network_type} == "flat" ]]; then
+     sudo /opt/pbench-agent/bench-scripts/pbench-trafficgen \
+          ${opt_base} ${opt_mac} ${opt_ip} 
+   elif [[ ${provider_network_type} == "vlan" ]]; then
+     sudo /opt/pbench-agent/bench-scripts/pbench-trafficgen \
+          ${opt_base} ${opt_mac} ${opt_ip} ${opt_vlan} 
+   fi
 else
-  #echo pbench-moongen --rate=1 --dst-macs=$mac1,$mac2 --traffic=bidirec --accept-negative-loss --frame-sizes=64 --max-drop-pct=${traffic_loss_pct} --search-runtime=30 --validation-runtime=30 >> start-pbench-trafficgen
-  #use trex
-  echo pbench-trafficgen --config=pbench-trafficgen --num-flows=128 --traffic-directions=bidirec  --flow-mods=src-ip --traffic-generator=trex-txrx --devices=${traffic_gen_src_slot},${traffic_gen_dst_slot} --vlan-ids=${data_vlan_start},$((data_vlan_start+num_vm)) --search-runtime=${search_runtime} --validation-runtime=${validation_runtime} --max-loss-pct=${traffic_loss_pct} --dst-macs=$mac1,$mac2 >> start-pbench-trafficgen
+   if [[ ${testpmd_fwd} == "io" ]]; then
+     opt_mac=""
+   fi
+
+   if [[ ${provider_network_type} == "flat" ]]; then
+     sudo /opt/pbench-agent/bench-scripts/pbench-trafficgen \
+          ${opt_base} ${opt_mac}
+   elif [[ ${provider_network_type} == "vlan" ]]; then
+     sudo /opt/pbench-agent/bench-scripts/pbench-trafficgen \
+          ${opt_base} ${opt_mac} ${opt_vlan} 
+   fi
+fi
+
+if [[ ${run_pbench} == "yes" ]]; then
+  pbench-move-results
+fi
+
+if [[ ${cleanup} == "yes" ]]; then
+  delete_nfv_instances
 fi
 

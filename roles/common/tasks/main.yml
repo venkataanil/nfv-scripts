@@ -1,7 +1,9 @@
 ---
-- name: update authorized_key for root
-  shell: |
-    > /root/.ssh/authorized_keys
-    echo "{{ stack_key }}" >> /root/.ssh/authorized_keys
-    echo "{{ root_key }}" >> /root/.ssh/authorized_keys
- 
+- name: install red-hat-enterprise-linux.repo
+  copy: src=files/red-hat-enterprise-linux.repo dest=/etc/yum.repos.d/red-hat-enterprise-linux.repo owner=root group=root mode=0644
+- name: install rhel-7-common.repo
+  copy: src=files/rhel-7-common.repo dest=/etc/yum.repos.d/rhel-7-common.repo owner=root group=root mode=0644
+- name: install optional repo
+  copy: src=files/rhel-optional.repo dest=/etc/yum.repos.d/rhel-optional.repo owner=root group=root mode=0644 
+- name: install rhelosp-rhel-7-fast-datapth.repo
+  copy: src=files/rhelosp-rhel-7-fast-datapth.repo dest=/etc/yum.repos.d/rhelosp-rhel-7-fast-datapth.repo owner=root group=root mode=0644

@@ -12,11 +12,28 @@
 
     dpdk-devbind -u 00:05.0 00:06.0 
     dpdk-devbind -b vfio-pci 00:05.0 00:06.0 
-    testpmd_cmd="testpmd -l 0,2,4 --socket-mem 1024 -n 4 --proc-type auto \
+    if [[ {{ testpmd_fwd }} == "macswap" ]]; then
+      testpmd_cmd="testpmd -l 0,2 --socket-mem 1024 -n 4 --proc-type auto \
+                 --file-prefix pg -w 00:05.0 \
+                 -- --forward-mode=macswap \
+                    --nb-cores=1 --nb-ports=1 --portmask=1 --auto-start \
+                    --rxq=1 --txq=1 --rxd=2048 --txd=2048 >/tmp/testpmd"
+    elif [[ {{ testpmd_fwd }} == "io" ]]; then
+      testpmd_cmd="testpmd -l 0,2,4 --socket-mem 1024 -n 4 --proc-type auto \
                  --file-prefix pg -w 00:05.0 -w 00:06.0 \
-                 --  --forward-mode=mac --eth-peer=0,{{traffic_src_mac}} --eth-peer=1,{{traffic_dst_mac}} \
-                 --nb-cores=2 --nb-ports=2 --portmask=3  --auto-start \
-                 --rxq=1 --txq=1 --rxd=2048 --txd=2048 >/tmp/testpmd"
+                 -- --nb-cores=2 --nb-ports=2 --portmask=3  --auto-start \
+                    --rxq=1 --txq=1 --rxd=2048 --txd=2048 >/tmp/testpmd"
+    elif [[ {{ testpmd_fwd }} == "mac" ]]; then
+      testpmd_cmd="testpmd -l 0,2,4 --socket-mem 1024 -n 4 --proc-type auto \
+                 --file-prefix pg -w 00:05.0 -w 00:06.0 \
+                 --  --forward-mode=mac --eth-peer=0,{{traffic_src_mac}} \
+                     --eth-peer=1,{{traffic_dst_mac}} \
+                     --nb-cores=2 --nb-ports=2 --portmask=3  --auto-start \
+                     --rxq=1 --txq=1 --rxd=2048 --txd=2048 >/tmp/testpmd"
+    else
+      echo "invalid testpmd_fwd: {{ testpmd_fwd }} " 1>&2
+      exit 1
+    fi
     screen -dmS testpmd bash -c "$testpmd_cmd"
     sleep 1
 

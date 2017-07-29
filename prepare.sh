@@ -19,17 +19,24 @@ function delete_nfv_instances () {
   done
 
   echo "delete unused ports"
-  for id in $(neutron port-list | grep ip_address | egrep -v '10.1.1.1"|10.1.1.2"' | awk -F'|' '{print $2}' | awk '{print $1}'); do
+  for id in $(neutron port-list | grep ip_address \
+                                | egrep -v '10.1.1.1"|10.1.1.2"' \
+                                | awk -F'|' '{print $2}' \
+                                | awk '{print $1}'); do
     neutron port-delete $id
   done
 
   echo "delete provider subnets"
-  for id in $(neutron subnet-list | grep provider | awk -F'|' '{print $2}' | awk '{print $1}'); do
+  for id in $(neutron subnet-list | grep provider \
+                                  | awk -F'|' '{print $2}' \
+                                  | awk '{print $1}'); do
     neutron subnet-delete $id
   done
 
   echo "delete provider nets"
-  for id in $(neutron net-list | grep provider | awk -F'|' '{print $2}' | awk '{print $1}'); do
+  for id in $(neutron net-list | grep provider \
+                               | awk -F'|' '{print $2}' \
+                               | awk '{print $1}'); do
     neutron net-delete $id
   done
 
@@ -41,7 +48,8 @@ function get_vm_mac() {
   local vm=$1
   local net=$2
   local vm_ip=$(openstack server show $vm | sed -n -r "s/.*$net=([.0-9]+).*/\1/p")
-  local mac=$(neutron port-list --fixed_ips ip_address=${vm_ip} | sed -n -r "s/.*([a-f0-9]{2}:[a-f0-9]{2}:[a-f0-9]{2}:[a-f0-9]{2}:[a-f0-9]{2}:[a-f0-9]{2}).*/\1/p")
+  local mac=$(neutron port-list --fixed_ips ip_address=${vm_ip} \
+              | sed -n -r "s/.*([a-f0-9]{2}:[a-f0-9]{2}:[a-f0-9]{2}:[a-f0-9]{2}:[a-f0-9]{2}:[a-f0-9]{2}).*/\1/p")
   echo $mac
 }
 
@@ -83,9 +91,20 @@ function start_instance() {
   local id2=$3
   local id3=$4
   if [[ -z "$user_data" ]]; then
-    openstack server create --flavor nfv --image ${vm_image_name} --nic port-id="$id3" --nic port-id="$id1" --nic port-id="$id2" --key-name demo-key $name 
+    openstack server create --flavor nfv \
+                            --image ${vm_image_name} \
+                            --nic port-id="$id3" \
+                            --nic port-id="$id1" \
+                            --nic port-id="$id2" \
+                            --key-name demo-key $name 
   else
-    openstack server create --flavor nfv --image ${vm_image_name} --nic port-id=$id3 --nic port-id=$id1 --nic port-id=$id2 --key-name demo-key --user-data $user_data $name 
+    openstack server create --flavor nfv \
+                            --image ${vm_image_name} \
+                            --nic port-id=$id3 \
+                            --nic port-id=$id1 \
+                            --nic port-id=$id2 \
+                            --key-name demo-key \
+                            --user-data $user_data $name 
   fi
   if [[ $? -ne 0 ]]; then
     echo nova boot failed
@@ -163,7 +182,34 @@ function check_input() {
   esac
 }
 
+function stop_pbench () {
+  pbench-kill-tools
+  pbench-clear-tools
+}
 
+function start_pbench () {
+  comupte_tools=(proc-sched_debug proc-interrupts sar openvswitch iostat)
+  vm_tools=(proc-sched_debug proc-interrupts sar iostat)
+ 
+  stop_pbench
+  source ${stackrc} || error "can't load stackrc"
+  echo "start tools on computes"
+  for node in $(nova list | sed -n -r 's/.*compute.*ctlplane=([.0-9]+).*/\1/ p'); do
+    for tool in ${comupte_tools[@]}; do
+      pbench-register-tool --remote=$node --name=$tool
+    done
+  done
+
+  echo "start tools on VMs"
+  source ${overcloudrc} || error "can't load overcloudrc"
+  for node in $(nova list | sudo sed -n -r 's/.*(demo[0-9]+).*access=([.0-9]+).*/\2/p'); do
+    for tool in ${vm_tools[@]}; do
+      pbench-register-tool --remote=$node --name=$tool
+    done
+  done
+}
+ 
+ 
 SCRIPT_PATH=$(dirname $0)             # relative
 SCRIPT_PATH=$(cd $SCRIPT_PATH && pwd)  # absolutized and normalized
 
@@ -183,6 +229,9 @@ if [[ ! -z "${browbeat_nfv_vars}" ]]; then
   done
 fi
 
+# when comparing string, ignore case
+shopt -s nocasematch
+
 # sanity check input parameters
 echo "##### sanity check input parameters" 
 check_input
@@ -194,7 +243,9 @@ delete_nfv_instances
 # if user-data is required for cloud-init, we need to build the mime first
 echo "##### building user_data for cloud-init"
 if [[ ! -z "${user_data}" ]]; then
-  [ -f ${SCRIPT_PATH}/create_mime.py ] && [ -f ${SCRIPT_PATH}/post-boot.sh ] && [ -f  ${SCRIPT_PATH}/cloud-config ] || error "The following files are required: create_mime.py post-boot.sh cloud-config" 
+  [ -f ${SCRIPT_PATH}/create_mime.py ] && [ -f ${SCRIPT_PATH}/post-boot.sh ] \
+      && [ -f  ${SCRIPT_PATH}/cloud-config ] \
+      || error "The following files are required: create_mime.py post-boot.sh cloud-config" 
   # make sure user_data is a absolute path
   [[ ${user_data} = /* ]] || user_data=${SCRIPT_PATH}/${user_data}
   ${SCRIPT_PATH}/create_mime.py ${SCRIPT_PATH}/cloud-config:text/cloud-config ${SCRIPT_PATH}/post-boot.sh:text/x-shellscript > ${SCRIPT_PATH}/${user_data} || error "failed to create user-data for cloud-init"
@@ -508,66 +559,63 @@ echo traffic_src_mac=${traffic_src_mac} traffic_dst_mac=${traffic_dst_mac}
 echo "##### provision nfv work load"
 ansible-playbook -i $nodes ${SCRIPT_PATH}/nfv.yml --extra-vars "run_pbench=${run_pbench} traffic_src_mac=${traffic_src_mac} traffic_dst_mac=${traffic_dst_mac} routing=${routing} testpmd_fwd=${testpmd_fwd} num_vm=${num_vm}" || error "failed to run NFV application"
 
-source $overcloudrc
-mac1=`get_vm_mac demo1 provider-nfv0`
-mac2=`get_vm_mac demo${num_vm} provider-nfv${num_vm}`
-
-# prepare test script
-if [[ ${run_pbench} == "yes" ]]; then
-  echo "##### starting pbench agent"
-  ${SCRIPT_PATH}/start_pbench.sh
-fi
-
-if [[ ${run_traffic_gen} == "no" ]]; then
-  if [[ ${cleanup} == "yes" ]]; then
-    delete_nfv_instances
+# running traffic
+if [[ ${run_traffic_gen} == "true" ]]; then
+  if [[ ${run_pbench} == "true" ]]; then
+    echo "##### starting pbench agent"
+    start_pbench
   fi
-  exit 0
+
+  source $overcloudrc
+  mac1=`get_vm_mac demo1 provider-nfv0`
+  mac2=`get_vm_mac demo${num_vm} provider-nfv${num_vm}`
+
+  echo "##### starting traffic generator"
+  opt_base="--config=${pbench_report_prefix} --samples=${samples} \
+            --frame-sizes=${data_pkt_size} --num-flows=${num_flows} \
+            --traffic-directions=${traffic_direction} \
+            --flow-mods=src-ip --traffic-generator=${traffic_gen} \
+            --devices=${traffic_gen_src_slot},${traffic_gen_dst_slot} \
+            --search-runtime=${search_runtime} \
+            --validation-runtime=${validation_runtime} \
+            --max-loss-pct=${traffic_loss_pct}"
+  
+  opt_mac="--dst-macs=$mac1,$mac2"
+  opt_ip="--src-ips=20.0.0.100,20.${num_vm}.0.100 \
+          --dst-ips=20.${num_vm}.0.100,20.0.0.100"
+  
+  opt_vlan="--vlan-ids=${data_vlan_start},$((data_vlan_start+num_vm))"
+  
+  if [[ $routing == "vpp" ]]; then
+     if [[ ${provider_network_type} == "flat" ]]; then
+       sudo /opt/pbench-agent/bench-scripts/pbench-trafficgen \
+            ${opt_base} ${opt_mac} ${opt_ip} 
+     elif [[ ${provider_network_type} == "vlan" ]]; then
+       sudo /opt/pbench-agent/bench-scripts/pbench-trafficgen \
+            ${opt_base} ${opt_mac} ${opt_ip} ${opt_vlan} 
+     fi
+  else
+     if [[ ${testpmd_fwd} == "io" ]]; then
+       opt_mac=""
+     fi
+  
+     if [[ ${provider_network_type} == "flat" ]]; then
+       sudo /opt/pbench-agent/bench-scripts/pbench-trafficgen \
+            ${opt_base} ${opt_mac}
+     elif [[ ${provider_network_type} == "vlan" ]]; then
+       sudo /opt/pbench-agent/bench-scripts/pbench-trafficgen \
+            ${opt_base} ${opt_mac} ${opt_vlan} 
+     fi
+  fi
+  
+  if [[ ${run_pbench} == "true" ]]; then
+    pbench-move-results
+    stop_pbench
+  fi
 fi
-
-echo "##### running traffic gen"
-opt_base="--config=${pbench_report_prefix} --samples=${samples} \
-          --frame-sizes=${data_pkt_size} --num-flows=${num_flows} \
-          --traffic-directions=${traffic_direction} \
-          --flow-mods=src-ip --traffic-generator=${traffic_gen} \
-          --devices=${traffic_gen_src_slot},${traffic_gen_dst_slot} \
-          --search-runtime=${search_runtime} \
-          --validation-runtime=${validation_runtime} \
-          --max-loss-pct=${traffic_loss_pct}"
-
-opt_mac="--dst-macs=$mac1,$mac2"
-opt_ip="--src-ips=20.0.0.100,20.${num_vm}.0.100 \
-        --dst-ips=20.${num_vm}.0.100,20.0.0.100"
-
-opt_vlan="--vlan-ids=${data_vlan_start},$((data_vlan_start+num_vm))"
-
-if [[ $routing == "vpp" ]]; then
-   if [[ ${provider_network_type} == "flat" ]]; then
-     sudo /opt/pbench-agent/bench-scripts/pbench-trafficgen \
-          ${opt_base} ${opt_mac} ${opt_ip} 
-   elif [[ ${provider_network_type} == "vlan" ]]; then
-     sudo /opt/pbench-agent/bench-scripts/pbench-trafficgen \
-          ${opt_base} ${opt_mac} ${opt_ip} ${opt_vlan} 
-   fi
-else
-   if [[ ${testpmd_fwd} == "io" ]]; then
-     opt_mac=""
-   fi
-
-   if [[ ${provider_network_type} == "flat" ]]; then
-     sudo /opt/pbench-agent/bench-scripts/pbench-trafficgen \
-          ${opt_base} ${opt_mac}
-   elif [[ ${provider_network_type} == "vlan" ]]; then
-     sudo /opt/pbench-agent/bench-scripts/pbench-trafficgen \
-          ${opt_base} ${opt_mac} ${opt_vlan} 
-   fi
-fi
-
-if [[ ${run_pbench} == "yes" ]]; then
-  pbench-move-results
-fi
-
-if [[ ${cleanup} == "yes" ]]; then
+  
+if [[ ${cleanup} == "true" ]]; then
+  echo "##### deleting nfv instances"
   delete_nfv_instances
 fi
-
+  

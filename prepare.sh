@@ -1,6 +1,7 @@
 #/bin/bash
 # create n Vms, n specified by the first augument
 set -x
+export ANSIBLE_HOST_KEY_CHECKING=False
 
 error ()
 {
@@ -62,8 +63,8 @@ function get_mac_from_pci_slot () {
   local mac 
   if echo $line | grep igb; then
     kernel_driver=igb
-  elif echo $line | grep i40; then
-    kernel_driver=i40
+  elif echo $line | grep i40e; then
+    kernel_driver=i40e
   elif echo $line | grep ixgbe; then
     kernel_driver=ixgbe
   else
@@ -76,7 +77,7 @@ function get_mac_from_pci_slot () {
   mac=$(sudo dmesg | sed -r -n "s/.*${slot}:.*([0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2})/\1/p" | tail -1)
   eval $__resultvar=$mac
   # bind the port back to vfio-pci driver
-  lsmod | grep vfio_pci || modprobe vfio-pci
+  lsmod | grep vfio_pci || sudo modprobe vfio-pci
   sudo dpdk-devbind -b vfio-pci $slot
 }
 
@@ -90,22 +91,29 @@ function start_instance() {
   local id1=$2
   local id2=$3
   local id3=$4
-  if [[ -z "$user_data" ]]; then
-    openstack server create --flavor nfv \
-                            --image ${vm_image_name} \
-                            --nic port-id="$id3" \
-                            --nic port-id="$id1" \
-                            --nic port-id="$id2" \
-                            --key-name demo-key $name 
-  else
-    openstack server create --flavor nfv \
-                            --image ${vm_image_name} \
-                            --nic port-id=$id3 \
-                            --nic port-id=$id1 \
-                            --nic port-id=$id2 \
-                            --key-name demo-key \
-                            --user-data $user_data $name 
+
+  local opt=""
+  local hypervisor=""
+  if [[ ! -z "$compute_node" ]]; then
+    # is the node name even right? need full name(with domain) 
+    hypervisor=$(openstack hypervisor list | grep compute-0 | awk '{print $4}')
+    if [[ ! -z "hypervisor" ]]; then
+      opt="$opt --availability-zone nova:$hypervisor"
+    fi
   fi
+
+  if [[ ! -z "$user_data" ]]; then
+    opt="$opt --user-data $user_data"
+  fi
+
+  openstack server create --flavor nfv \
+                          --image ${vm_image_name} \
+                          --nic port-id="$id3" \
+                          --nic port-id="$id1" \
+                          --nic port-id="$id2" \
+                          --key-name demo-key \
+                          $opt $name 
+
   if [[ $? -ne 0 ]]; then
     echo nova boot failed
     exit 1
@@ -183,8 +191,8 @@ function check_input() {
 }
 
 function stop_pbench () {
-  pbench-kill-tools
-  pbench-clear-tools
+  sudo "PATH=$PATH" sh -c pbench-kill-tools 
+  sudo "PATH=$PATH" sh -c pbench-clear-tools
 }
 
 function start_pbench () {
@@ -196,15 +204,15 @@ function start_pbench () {
   echo "start tools on computes"
   for node in $(nova list | sed -n -r 's/.*compute.*ctlplane=([.0-9]+).*/\1/ p'); do
     for tool in ${comupte_tools[@]}; do
-      pbench-register-tool --remote=$node --name=$tool
+      sudo "PATH=$PATH" sh -c "pbench-register-tool --remote=$node --name=$tool"
     done
   done
 
   echo "start tools on VMs"
   source ${overcloudrc} || error "can't load overcloudrc"
-  for node in $(nova list | sudo sed -n -r 's/.*(demo[0-9]+).*access=([.0-9]+).*/\2/p'); do
+  for i in $(seq ${num_vm}); do
     for tool in ${vm_tools[@]}; do
-      pbench-register-tool --remote=$node --name=$tool
+      sudo "PATH=$PATH" sh -c "pbench-register-tool --remote=demo$i --name=$tool"
     done
   done
 }
@@ -456,6 +464,16 @@ sudo sed -i -r '/vm/d' /etc/hosts
 sudo sed -i -r '/demo/d' /etc/hosts
 nova list | sudo sed -n -r 's/.*(demo[0-9]+).*access=([.0-9]+).*/\2 \1/p' | sudo tee --append /etc/hosts >/dev/null
 
+# remove old entries in known_hosts
+echo "##### remove old entries in known_hosts"
+for i in $(seq $num_vm); do
+  sudo sed -i -r "/demo$i/d" /root/.ssh/known_hosts
+  sudo sed -i -r "/demo$i/d" /home/stack/.ssh/known_hosts
+  vm_ip = $(grep demo$i /etc/hosts | awk '{print $1}')
+  sudo sed -i -r "/${vm_ip}/d" /root/.ssh/known_hosts
+  sudo sed -i -r "/${vm_ip}/d" /home/stack/.ssh/known_hosts
+done
+
 # record all VM's access info in ansible inventory file
 nodes=${SCRIPT_PATH}/nodes
 
@@ -559,6 +577,7 @@ echo traffic_src_mac=${traffic_src_mac} traffic_dst_mac=${traffic_dst_mac}
 echo "##### provision nfv work load"
 ansible-playbook -i $nodes ${SCRIPT_PATH}/nfv.yml --extra-vars "run_pbench=${run_pbench} traffic_src_mac=${traffic_src_mac} traffic_dst_mac=${traffic_dst_mac} routing=${routing} testpmd_fwd=${testpmd_fwd} num_vm=${num_vm}" || error "failed to run NFV application"
 
+
 # running traffic
 if [[ ${run_traffic_gen} == "true" ]]; then
   if [[ ${run_pbench} == "true" ]]; then
@@ -588,11 +607,11 @@ if [[ ${run_traffic_gen} == "true" ]]; then
   
   if [[ $routing == "vpp" ]]; then
      if [[ ${provider_network_type} == "flat" ]]; then
-       sudo /opt/pbench-agent/bench-scripts/pbench-trafficgen \
-            ${opt_base} ${opt_mac} ${opt_ip} 
+       sudo "PATH=$PATH" sh -c "pbench-trafficgen \
+            ${opt_base} ${opt_mac} ${opt_ip}" 
      elif [[ ${provider_network_type} == "vlan" ]]; then
-       sudo /opt/pbench-agent/bench-scripts/pbench-trafficgen \
-            ${opt_base} ${opt_mac} ${opt_ip} ${opt_vlan} 
+       sudo "PATH=$PATH" sh -c "pbench-trafficgen \
+            ${opt_base} ${opt_mac} ${opt_ip} ${opt_vlan}" 
      fi
   else
      if [[ ${testpmd_fwd} == "io" ]]; then
@@ -600,16 +619,16 @@ if [[ ${run_traffic_gen} == "true" ]]; then
      fi
   
      if [[ ${provider_network_type} == "flat" ]]; then
-       sudo /opt/pbench-agent/bench-scripts/pbench-trafficgen \
-            ${opt_base} ${opt_mac}
+       sudo "PATH=$PATH" sh -c "pbench-trafficgen \
+            ${opt_base} ${opt_mac}"
      elif [[ ${provider_network_type} == "vlan" ]]; then
-       sudo /opt/pbench-agent/bench-scripts/pbench-trafficgen \
-            ${opt_base} ${opt_mac} ${opt_vlan} 
+       sudo "PATH=$PATH" sh -c "pbench-trafficgen \
+            ${opt_base} ${opt_mac} ${opt_vlan}" 
      fi
   fi
   
   if [[ ${run_pbench} == "true" ]]; then
-    pbench-move-results
+    sudo "PATH=$PATH" sh -c "pbench-move-results" 
     stop_pbench
   fi
 fi

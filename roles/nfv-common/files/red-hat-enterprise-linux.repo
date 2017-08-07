@@ -1,6 +1,0 @@
-[red-hat-enterprise-linux]
-name=red-hat-enterprise-linux
-baseurl=http://pulp.dist.prod.ext.phx2.redhat.com/content/dist/rhel/server/7/7Server/x86_64/os/
-enabled=1
-gpgcheck=0
-

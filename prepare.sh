@@ -96,7 +96,7 @@ function start_instance() {
   local hypervisor=""
   if [[ ! -z "$compute_node" ]]; then
     # is the node name even right? need full name(with domain) 
-    hypervisor=$(openstack hypervisor list | grep compute-0 | awk '{print $4}')
+    hypervisor=$(openstack hypervisor list | grep $compute_node | awk '{print $4}')
     if [[ ! -z "hypervisor" ]]; then
       opt="$opt --availability-zone nova:$hypervisor"
     fi
@@ -167,6 +167,10 @@ function check_input() {
   elif [[ ${access_network_type} != "flat" ]]; then
     error "invalid access_network_type: ${access_network_type}"
   fi
+
+  if [[ "$routing" == "testpmd" && "${vnic_type}" == "sriov" ]]; then
+    routing="testpmd-sriov"
+  fi 
 
   if [[ "$routing" == "testpmd" || "$routing" == "testpmd-sriov" ]]; then
     if [[ -z ${testpmd_fwd} ]]; then
@@ -342,19 +346,18 @@ echo "##### creating nfv flavor"
 
 openstack flavor create nfv --id 1 --ram 4096 --disk 20 --vcpus 6
 
-if [[ ${vnic_type} == "sriov" ]]; then
-  nova flavor-key 1 set hw:cpu_policy=dedicated \
-                        hw:mem_page_size=1GB \
-                        hw:numa_nodes=1 \
-                        hw:numa_mempolicy=preferred \
-                        hw:numa_cpus.0=0,1,2,3,4,5 \
-                        hw:numa_mem.0=4096
-else   
-  nova flavor-key 1 set hw:cpu_policy=dedicated \
-                        hw:mem_page_size=1GB
-  if [[ ${enable_HT} == "true" ]]; then
-    nova flavor-key 1 set hw:cpu_thread_policy=prefer
-  fi
+# no need to set numa topo
+#  nova flavor-key 1 set hw:cpu_policy=dedicated \
+#                        hw:mem_page_size=1GB \
+#                        hw:numa_nodes=1 \
+#                        hw:numa_mempolicy=strict \
+#                        hw:numa_cpus.0=0,1,2,3,4,5 \
+#                        hw:numa_mem.0=4096
+
+nova flavor-key 1 set hw:cpu_policy=dedicated \
+                      hw:mem_page_size=1GB 
+if [[ ${enable_HT} == "true" ]]; then
+  nova flavor-key 1 set hw:cpu_thread_policy=require
 fi
 
 if [[ ${enable_multi_queue} == "true" ]]; then
@@ -457,6 +460,7 @@ fi
 if [ $completed -ne 1 ]; then
   error "failed to start all the instances"
 fi
+
 
 # update /etc/hosts entry with instances
 echo "##### update /etc/hosts entry with instance names"
@@ -628,7 +632,10 @@ if [[ ${run_traffic_gen} == "true" ]]; then
   fi
   
   if [[ ${run_pbench} == "true" ]]; then
-    sudo "PATH=$PATH" sh -c "pbench-move-results" 
+    # move the results to pbench server only if not run test from browbeat
+    if [[ -z "${browbeat_nfv_vars}" ]]; then 
+      sudo -i pbench-move-results
+    fi
     stop_pbench
   fi
 fi

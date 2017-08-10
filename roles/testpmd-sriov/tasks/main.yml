@@ -1,7 +1,7 @@
 ---
 - name: running testpmd in screen
   shell: |
-    systemctl stop vpp
+    systemctl stop vpp 2>/dev/null
     screen -X -S testpmd quit 
     myhostname={{ inventory_hostname }}
     systemctl stop NetworkManager

@@ -1,7 +1,7 @@
 ---
 - name: running testpmd in screen
   shell: |
-    systemctl stop vpp
+    systemctl stop vpp 2>/dev/null
     screen -X -S testpmd quit 
     myhostname={{ inventory_hostname }}
     systemctl stop NetworkManager
@@ -30,6 +30,7 @@
     else
       echo "invalid testpmd_fwd: {{ testpmd_fwd }} " 1>&2
       exit 1
+    fi
     screen -dmS testpmd bash -c "$testpmd_cmd"
     sleep 1
 

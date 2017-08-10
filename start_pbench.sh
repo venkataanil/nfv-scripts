@@ -40,12 +40,12 @@ done
 
 else
 source /home/stack/overcloudrc || error "can't load overcloudrc"
-nova show $1 || error "can't load overcloudrc"
+nova show $1 || error "can't find instance"
 node=$(nova show $1 | grep hypervisor_hostname | sed -n -r 's/.* (\S*compute-[0-9]+).*/\1/p')
 for tool in ${comupte_tools[@]}; do
   pbench-register-tool --remote=$node --name=$tool
 done
-ssh root@$1 "sed -i -e s/^collect_sos/\#collect_sos/ /opt/pbench-agent/util-scripts/pbench-sysinfo-dump" 
+#ssh root@$1 "sed -i -e s/^collect_sos/\#collect_sos/ /opt/pbench-agent/util-scripts/pbench-sysinfo-dump" 
 for tool in ${vm_tools[@]}; do
   pbench-register-tool --remote=$1 --name=$tool
 done

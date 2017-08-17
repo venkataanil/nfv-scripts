@@ -1,0 +1,23 @@
+[nxsw]
+cisco-netapp ansible_connection=local un=admin pwd=100yard-
+[VMs]
+demo1 ansible_host=10.1.1.6
+[VMs:vars]
+ansible_connection=ssh 
+ansible_user=cloud-user
+ansible_ssh_pass=redhat
+ansible_become=true
+[computes]
+192.0.2.12
+192.0.2.10
+192.0.2.13
+[controllers]
+192.0.2.7
+[computes:vars]
+ansible_connection=ssh
+ansible_user=heat-admin
+ansible_become=true
+[controllers:vars]
+ansible_connection=ssh
+ansible_user=heat-admin
+ansible_become=true

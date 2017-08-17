@@ -55,16 +55,18 @@ yum install -y dpdk-tools
 
 yum -y install libhugetlbfs-utils
 hugeadm --create-global-mounts
-grubby --update-kernel=`grubby --default-kernel` --args="default_hugepagesz=1G hugepagesz=1G hugepages=1 isolcpus=2-5"
+grubby --update-kernel=`grubby --default-kernel` --args="default_hugepagesz=1G hugepagesz=1G hugepages=1 isolcpus=2-5 ipv6.disable=1"
 
 #yum install -y tuned
-yum install -y tuned-profiles-cpu-partitioning
-sed -i -r '/^isolated_cores/d' /etc/tuned/cpu-partitioning-variables.conf
-sed -i -e "\$aisolated_cores=2-5" /etc/tuned/cpu-partitioning-variables.conf
-#systemctl enable tuned
-#systemctl start tuned
-#sleep 1
-tuned-adm profile cpu-partitioning
+if systemctl status tuned | grep running; then
+    echo #### yes tuned is running
+    systemctl stop tuned
+    tuned -l -P -D -d
+    yum install -y tuned-profiles-cpu-partitioning
+    sed -i -r '/^isolated_cores/d' /etc/tuned/cpu-partitioning-variables.conf
+    sed -i -e "\$aisolated_cores=2-5" /etc/tuned/cpu-partitioning-variables.conf
+    tuned-adm profile cpu-partitioning
+fi
 
 yum -y install vpp
 

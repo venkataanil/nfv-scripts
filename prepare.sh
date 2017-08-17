@@ -192,6 +192,15 @@ function check_input() {
     bidirec|unidirec|revunidirec);;
     *) error "invalid traffic_direction: ${traffic_direction}";;
   esac
+
+  if [ -z ${traffic_gen_extra_opt+x} ]; then 
+    #traffic_gen_extra_opt unset
+    traffic_gen_extra_opt=""
+  fi 
+
+  if [ -z ${stop_pbench_after+x}]; then
+    stop_pbench_after="false"
+  fi
 }
 
 function stop_pbench () {
@@ -260,7 +269,7 @@ if [[ ! -z "${user_data}" ]]; then
       || error "The following files are required: create_mime.py post-boot.sh cloud-config" 
   # make sure user_data is a absolute path
   [[ ${user_data} = /* ]] || user_data=${SCRIPT_PATH}/${user_data}
-  ${SCRIPT_PATH}/create_mime.py ${SCRIPT_PATH}/cloud-config:text/cloud-config ${SCRIPT_PATH}/post-boot.sh:text/x-shellscript > ${SCRIPT_PATH}/${user_data} || error "failed to create user-data for cloud-init"
+  ${SCRIPT_PATH}/create_mime.py ${SCRIPT_PATH}/cloud-config:text/cloud-config ${SCRIPT_PATH}/post-boot.sh:text/x-shellscript > ${user_data} || error "failed to create user-data for cloud-init"
 fi
 
 source ${overcloudrc} || error "can't load overcloudrc"
@@ -545,6 +554,7 @@ done
 
 [ $reachable -eq 1 ] || error "not all VM ssh port open"
 
+
 # upload ssh key to all $nodes. if cloud-init user-data is supplied, no need to update VMs 
 echo "##### update authorized ssh key"
 if [[ -z "${user_data}" ]]; then
@@ -554,14 +564,21 @@ else
 fi
 
 for host in ${groups[@]}; do
+  if [[ $host != "VMs" ]]; then
+    clouduser=heat-admin
+  else
+    clouduser=cloud-user
+  fi
   if [[ "$USER" == "stack" ]]; then
     ANSIBLE_HOST_KEY_CHECKING=False UserKnownHostsFile=/dev/null ansible $host -i $nodes -m shell -a "> /root/.ssh/authorized_keys; echo $(sudo cat /home/stack/.ssh/id_rsa.pub) >> /root/.ssh/authorized_keys; echo $(sudo cat /root/.ssh/id_rsa.pub) >> /root/.ssh/authorized_keys"
     ANSIBLE_HOST_KEY_CHECKING=False UserKnownHostsFile=/dev/null ansible $host -i $nodes -m lineinfile -a "name=/etc/ssh/sshd_config regexp='^UseDNS' line='UseDNS no'"
     ANSIBLE_HOST_KEY_CHECKING=False UserKnownHostsFile=/dev/null ansible $host -i $nodes -m service -a "name=sshd state=restarted"
+    ANSIBLE_HOST_KEY_CHECKING=False UserKnownHostsFile=/dev/null ansible $host -i $nodes -m shell -a "echo $(sudo cat /root/.ssh/id_rsa.pub) >> /home/${clouduser}/.ssh/authorized_keys"
   else
     sudo -u stack ANSIBLE_HOST_KEY_CHECKING=False UserKnownHostsFile=/dev/null ansible $host -i $nodes -m shell -a "> /root/.ssh/authorized_keys; echo $(sudo cat /home/stack/.ssh/id_rsa.pub) >> /root/.ssh/authorized_keys; echo $(sudo cat /root/.ssh/id_rsa.pub) >> /root/.ssh/authorized_keys"
     sudo -u stack ANSIBLE_HOST_KEY_CHECKING=False UserKnownHostsFile=/dev/null ansible $host -i $nodes -m lineinfile -a "name=/etc/ssh/sshd_config regexp='^UseDNS' line='UseDNS no'"
     sudo -u stack ANSIBLE_HOST_KEY_CHECKING=False UserKnownHostsFile=/dev/null ansible $host -i $nodes -m service -a "name=sshd state=restarted"
+    sudo -u stack ANSIBLE_HOST_KEY_CHECKING=False UserKnownHostsFile=/dev/null ansible $host -i $nodes -m shell -a "echo $(sudo cat /root/.ssh/id_rsa.pub) >> /home/${clouduser}/.ssh/authorized_keys"
   fi
 done
 
@@ -601,13 +618,17 @@ if [[ ${run_traffic_gen} == "true" ]]; then
             --devices=${traffic_gen_src_slot},${traffic_gen_dst_slot} \
             --search-runtime=${search_runtime} \
             --validation-runtime=${validation_runtime} \
-            --max-loss-pct=${traffic_loss_pct}"
+            --max-loss-pct=${traffic_loss_pct} ${traffic_gen_extra_opt}"
   
   opt_mac="--dst-macs=$mac1,$mac2"
-  opt_ip="--src-ips=20.0.0.100,20.${num_vm}.0.100 \
-          --dst-ips=20.${num_vm}.0.100,20.0.0.100"
+  opt_ip="--src-ips=20.0.255.254,20.${num_vm}.255.254 \
+          --dst-ips=20.${num_vm}.255.254,20.0.255.254"
   
   opt_vlan="--vlan-ids=${data_vlan_start},$((data_vlan_start+num_vm))"
+  # trex has issue with vlan traffic, here is a tempary workaround
+  if [[ "$traffic_gen" == "trex-txrx" ]]; then
+    opt_vlan=""
+  fi
   
   if [[ $routing == "vpp" ]]; then
      if [[ ${provider_network_type} == "flat" ]]; then
@@ -636,7 +657,9 @@ if [[ ${run_traffic_gen} == "true" ]]; then
     if [[ -z "${browbeat_nfv_vars}" ]]; then 
       sudo -i pbench-move-results
     fi
-    stop_pbench
+    if [[ ${stop_pbench_after} == "true" ]]; then
+      stop_pbench
+    fi
   fi
 fi
   

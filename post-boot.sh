@@ -60,12 +60,15 @@ grubby --update-kernel=`grubby --default-kernel` --args="default_hugepagesz=1G h
 #yum install -y tuned
 if systemctl status tuned | grep running; then
     echo #### yes tuned is running
-    systemctl stop tuned
-    tuned -l -P -D -d
+    #systemctl stop tuned
+    #tuned -l -P -D -d
     yum install -y tuned-profiles-cpu-partitioning
     sed -i -r '/^isolated_cores/d' /etc/tuned/cpu-partitioning-variables.conf
     sed -i -e "\$aisolated_cores=2-5" /etc/tuned/cpu-partitioning-variables.conf
-    tuned-adm profile cpu-partitioning
+    if pgrep polkitd; then
+        echo "polkitd is running"
+        tuned-adm profile cpu-partitioning
+    fi
 fi
 
 yum -y install vpp

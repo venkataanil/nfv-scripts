@@ -1,0 +1,16 @@
+---
+
+# this need to be done after pbench rpm installed
+- name: fix kvm-spinlock & openvswitch-datalog 
+  shell: |
+    cd ~
+    [ -d atheurer-pbench ] || git clone https://github.com/atheurer/pbench.git atheurer-pbench
+    cd atheurer-pbench
+    git checkout openvswitch
+    git pull origin openvswitch
+    cd /opt/pbench-agent/bench-scripts
+    mv kvm-spinlock kvm-spinlock.orig
+    ln -s ~/atheurer-pbench/agent/tool-scripts/kvm-spinlock
+    cd datalog
+    mv openvswitch-datalog openvswitch-datalog.orig
+    ln -s ~/atheurer-pbench/agent/tool-scripts/datalog/openvswitch-datalog

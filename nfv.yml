@@ -5,6 +5,7 @@
   roles:
     - { role: common }
     - { role: pbench, when: run_pbench }
+    - { role: pbench-compute-fix, when: run_pbench }
 
 - hosts: VMs
   become: true

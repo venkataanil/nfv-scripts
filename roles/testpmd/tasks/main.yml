@@ -16,10 +16,17 @@
                     --nb-cores=1 --nb-ports=1 --portmask=1 --auto-start \
                     --rxq=1 --txq=1 --rxd=256 --txd=256 >/tmp/testpmd"
     elif [[ {{ testpmd_fwd }} == "io" ]]; then
-      testpmd_cmd="testpmd -l 0,2,4 --socket-mem 1024 -n 4 --proc-type auto \
+      if [[ {{ mqueue }} == "true" ]]; then
+        testpmd_cmd="testpmd -l 0,2,3,4,5 --socket-mem 1024 -n 4 --proc-type auto \
+                 --file-prefix pg -w 00:04.0 -w 00:05.0 \
+                 -- --nb-cores=4 --nb-ports=2 --portmask=3  --auto-start \
+                    --rxq=2 --txq=2 --rxd=256 --txd=256 >/tmp/testpmd"
+      else 
+        testpmd_cmd="testpmd -l 0,2,4 --socket-mem 1024 -n 4 --proc-type auto \
                  --file-prefix pg -w 00:04.0 -w 00:05.0 \
                  -- --nb-cores=2 --nb-ports=2 --portmask=3  --auto-start \
                     --rxq=1 --txq=1 --rxd=256 --txd=256 >/tmp/testpmd"
+      fi
     elif [[ {{ testpmd_fwd }} == "mac" ]]; then
       testpmd_cmd="testpmd -l 0,2,4 --socket-mem 1024 -n 4 --proc-type auto \
                  --file-prefix pg -w 00:04.0 -w 00:05.0 \

@@ -21,7 +21,9 @@
         pmd_dpdk0={{pmd_dpdk0}}
         pmd_dpdk1={{pmd_dpdk1}}
         pmd_dpdk2={{pmd_dpdk2}}
- 
+        pmd_core_mask={{pmd_core_mask}}
+
+        ovs-vsctl --no-wait set Open_vSwitch . other_config:pmd-cpu-mask=$pmd_core_mask 
         declare -a vnic
         instance=$(virsh list | grep running | awk '{print $2}')
         n=0
@@ -31,8 +33,22 @@
         done
         if ((n>=1)); then
           for i in $(seq $n); do
-            ovs-vsctl set Interface dpdk$((i-1)) other_config:pmd-rxq-affinity=0:$(eval echo \$pmd_dpdk$((i-1)))
-            ovs-vsctl set Interface ${vnic[((i-1))]} other_config:pmd-rxq-affinity=0:$(eval echo \$pmd_vm_eth$((i-1)))
+            core_list=$(eval echo \$pmd_dpdk$((i-1)))
+            if echo $core_list | grep -q ','; then
+              core0=$(echo $core_list | awk -F ',' '{print $1}')
+              core1=$(echo $core_list | awk -F ',' '{print $2}')
+              ovs-vsctl set Interface dpdk$((i-1)) options:n_rxq=2 other_config:pmd-rxq-affinity="0:$core0,1:$core1"
+            else 
+              ovs-vsctl set Interface dpdk$((i-1)) other_config:pmd-rxq-affinity=0:$core_list
+            fi
+            core_list=$(eval echo \$pmd_vm_eth$((i-1)))
+            if echo $core_list | grep -q ','; then
+              core0=$(echo $core_list | awk -F ',' '{print $1}')
+              core1=$(echo $core_list | awk -F ',' '{print $2}')
+              ovs-vsctl set Interface ${vnic[((i-1))]} other_config:pmd-rxq-affinity="0:$core0,1:$core1"
+            else
+              ovs-vsctl set Interface ${vnic[((i-1))]} other_config:pmd-rxq-affinity=0:$core_list
+            fi
           done
         fi
       when: repin_ovs_pmd|default(false)|bool

@@ -3,6 +3,8 @@
 set -x
 export ANSIBLE_HOST_KEY_CHECKING=False
 
+source core_util_functions
+
 error ()
 {
   echo $* 1>&2
@@ -134,6 +136,10 @@ function check_input() {
     echo "num_flows not set, default to: 128"
     num_flows=128
   fi
+
+  if [ -z ${enable_multi_queue+x} ]; then
+    enable_multi_queue=false
+  fi
  
   if [ -z ${provider_network_type+x} ]; then 
     echo "provider_network_type not set, default to: flat"
@@ -214,14 +220,12 @@ function stop_pbench () {
 }
 
 function start_pbench () {
-  comupte_tools=(proc-sched_debug proc-interrupts sar openvswitch iostat)
-  vm_tools=(proc-sched_debug proc-interrupts sar iostat)
  
   stop_pbench
   source ${stackrc} || error "can't load stackrc"
   echo "start tools on computes"
   for node in $(nova list | sed -n -r 's/.*compute.*ctlplane=([.0-9]+).*/\1/ p'); do
-    for tool in ${comupte_tools[@]}; do
+    for tool in ${pbench_comupte_tools}; do
       sudo "PATH=$PATH" sh -c "pbench-register-tool --remote=$node --name=$tool"
     done
   done
@@ -229,7 +233,7 @@ function start_pbench () {
   echo "start tools on VMs"
   source ${overcloudrc} || error "can't load overcloudrc"
   for i in $(seq ${num_vm}); do
-    for tool in ${vm_tools[@]}; do
+    for tool in ${pbench_vm_tools}; do
       sudo "PATH=$PATH" sh -c "pbench-register-tool --remote=demo$i --name=$tool"
     done
   done
@@ -600,7 +604,9 @@ echo "##### repin threads on compute nodes"
 if [[ $vnic_type == "sriov" ]]; then
   ansible-playbook -i $nodes ${SCRIPT_PATH}/repin_threads.yml --extra-vars "repin_kvm_emulator=${repin_kvm_emulator}" || error "failed to repin thread"
 else
-  ansible-playbook -i $nodes ${SCRIPT_PATH}/repin_threads.yml --extra-vars "repin_ovs_nonpmd=${repin_ovs_nonpmd} repin_kvm_emulator=${repin_kvm_emulator} repin_ovs_pmd=${repin_ovs_pmd} pmd_vm_eth0=${pmd_vm_eth0} pmd_vm_eth1=${pmd_vm_eth1} pmd_vm_eth2=${pmd_vm_eth2} pmd_dpdk0=${pmd_dpdk0} pmd_dpdk1=${pmd_dpdk1} pmd_dpdk2=${pmd_dpdk2}" || error "failed to repin thread"
+  pmd_core_list="$pmd_vm_eth0,$pmd_vm_eth1,$pmd_vm_eth2,$pmd_dpdk0,$pmd_dpdk1,$pmd_dpdk2"
+  pmd_core_mask=`get_cpumask $pmd_core_list`
+  ansible-playbook -i $nodes ${SCRIPT_PATH}/repin_threads.yml --extra-vars "repin_ovs_nonpmd=${repin_ovs_nonpmd} repin_kvm_emulator=${repin_kvm_emulator} repin_ovs_pmd=${repin_ovs_pmd} pmd_vm_eth0=${pmd_vm_eth0} pmd_vm_eth1=${pmd_vm_eth1} pmd_vm_eth2=${pmd_vm_eth2} pmd_dpdk0=${pmd_dpdk0} pmd_dpdk1=${pmd_dpdk1} pmd_dpdk2=${pmd_dpdk2} pmd_core_mask=${pmd_core_mask}" || error "failed to repin thread"
 fi
 
 # get mac address from pci slot number
@@ -610,7 +616,7 @@ get_mac_from_pci_slot ${traffic_gen_dst_slot} traffic_dst_mac
 echo traffic_src_mac=${traffic_src_mac} traffic_dst_mac=${traffic_dst_mac}
 
 echo "##### provision nfv work load"
-ansible-playbook -i $nodes ${SCRIPT_PATH}/nfv.yml --extra-vars "run_pbench=${run_pbench} traffic_src_mac=${traffic_src_mac} traffic_dst_mac=${traffic_dst_mac} routing=${routing} testpmd_fwd=${testpmd_fwd} num_vm=${num_vm}" || error "failed to run NFV application"
+ansible-playbook -i $nodes ${SCRIPT_PATH}/nfv.yml --extra-vars "run_pbench=${run_pbench} traffic_src_mac=${traffic_src_mac} traffic_dst_mac=${traffic_dst_mac} routing=${routing} testpmd_fwd=${testpmd_fwd} num_vm=${num_vm} mqueue=${enable_multi_queue}" || error "failed to run NFV application"
 
 
 # running traffic

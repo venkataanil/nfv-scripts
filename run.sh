@@ -3,8 +3,6 @@
 set -x
 export ANSIBLE_HOST_KEY_CHECKING=False
 
-source core_util_functions
-
 error ()
 {
   echo $* 1>&2
@@ -262,6 +260,8 @@ fi
 # when comparing string, ignore case
 shopt -s nocasematch
 
+source ${SCRIPT_PATH}/core_util_functions
+
 # sanity check input parameters
 echo "##### sanity check input parameters" 
 check_input
@@ -282,6 +282,12 @@ if [[ ! -z "${user_data}" ]]; then
 fi
 
 source ${overcloudrc} || error "can't load overcloudrc"
+
+# we have to delete existing: multi-queue test has peroperty setting on image and can impact single-queue test
+if openstack image list | grep ${vm_image_name}; then
+  echo "##### deleting ${vm_image_name} image"
+  openstack image delete ${vm_image_name}
+fi
 
 echo "##### building instance image"
 if ! openstack image list | grep ${vm_image_name}; then
@@ -487,7 +493,6 @@ if [ $completed -ne 1 ]; then
   error "failed to start all the instances"
 fi
 
-
 # update /etc/hosts entry with instances
 echo "##### update /etc/hosts entry with instance names"
 sudo sed -i -r '/vm/d' /etc/hosts
@@ -499,7 +504,7 @@ echo "##### remove old entries in known_hosts"
 for i in $(seq $num_vm); do
   sudo sed -i -r "/demo$i/d" /root/.ssh/known_hosts
   sudo sed -i -r "/demo$i/d" /home/stack/.ssh/known_hosts
-  vm_ip = $(grep demo$i /etc/hosts | awk '{print $1}')
+  vm_ip=$(grep demo$i /etc/hosts | awk '{print $1}')
   sudo sed -i -r "/${vm_ip}/d" /root/.ssh/known_hosts
   sudo sed -i -r "/${vm_ip}/d" /home/stack/.ssh/known_hosts
 done
@@ -534,6 +539,15 @@ ansible_connection=ssh
 ansible_user=heat-admin
 ansible_become=true
 EOF
+
+echo "##### repin threads on compute nodes"
+if [[ $vnic_type == "sriov" ]]; then
+  ansible-playbook -i $nodes ${SCRIPT_PATH}/repin_threads.yml --extra-vars "repin_kvm_emulator=${repin_kvm_emulator}" || error "failed to repin thread"
+else
+  pmd_core_list="$pmd_vm_eth0,$pmd_vm_eth1,$pmd_vm_eth2,$pmd_dpdk0,$pmd_dpdk1,$pmd_dpdk2,$spare_cores"
+  pmd_core_mask=`get_cpumask $pmd_core_list`
+  ansible-playbook -i $nodes ${SCRIPT_PATH}/repin_threads.yml --extra-vars "repin_ovs_nonpmd=${repin_ovs_nonpmd} repin_kvm_emulator=${repin_kvm_emulator} repin_ovs_pmd=${repin_ovs_pmd} pmd_vm_eth0=${pmd_vm_eth0} pmd_vm_eth1=${pmd_vm_eth1} pmd_vm_eth2=${pmd_vm_eth2} pmd_dpdk0=${pmd_dpdk0} pmd_dpdk1=${pmd_dpdk1} pmd_dpdk2=${pmd_dpdk2} pmd_core_mask=${pmd_core_mask}" || error "failed to repin thread"
+fi
 
 # give 60 sec to cloud-init to complete
 if [[ ! -z "${user_data}" ]]; then
@@ -599,15 +613,6 @@ for host in ${groups[@]}; do
     sudo -u stack ANSIBLE_HOST_KEY_CHECKING=False UserKnownHostsFile=/dev/null ansible $host -i $nodes -m shell -a "echo $(sudo cat /root/.ssh/id_rsa.pub) >> /home/${clouduser}/.ssh/authorized_keys"
   fi
 done
-
-echo "##### repin threads on compute nodes"
-if [[ $vnic_type == "sriov" ]]; then
-  ansible-playbook -i $nodes ${SCRIPT_PATH}/repin_threads.yml --extra-vars "repin_kvm_emulator=${repin_kvm_emulator}" || error "failed to repin thread"
-else
-  pmd_core_list="$pmd_vm_eth0,$pmd_vm_eth1,$pmd_vm_eth2,$pmd_dpdk0,$pmd_dpdk1,$pmd_dpdk2"
-  pmd_core_mask=`get_cpumask $pmd_core_list`
-  ansible-playbook -i $nodes ${SCRIPT_PATH}/repin_threads.yml --extra-vars "repin_ovs_nonpmd=${repin_ovs_nonpmd} repin_kvm_emulator=${repin_kvm_emulator} repin_ovs_pmd=${repin_ovs_pmd} pmd_vm_eth0=${pmd_vm_eth0} pmd_vm_eth1=${pmd_vm_eth1} pmd_vm_eth2=${pmd_vm_eth2} pmd_dpdk0=${pmd_dpdk0} pmd_dpdk1=${pmd_dpdk1} pmd_dpdk2=${pmd_dpdk2} pmd_core_mask=${pmd_core_mask}" || error "failed to repin thread"
-fi
 
 # get mac address from pci slot number
 echo "##### getting mac address from pci slot number"

@@ -34,7 +34,9 @@
         if ((n>=1)); then
           for i in $(seq $n); do
             core_list=$(eval echo \$pmd_dpdk$((i-1)))
-            if echo $core_list | grep -q ','; then
+            if [ -z $core_list ]; then
+              true
+            elif echo $core_list | grep -q ','; then
               core0=$(echo $core_list | awk -F ',' '{print $1}')
               core1=$(echo $core_list | awk -F ',' '{print $2}')
               ovs-vsctl set Interface dpdk$((i-1)) options:n_rxq=2 other_config:pmd-rxq-affinity="0:$core0,1:$core1"
@@ -42,7 +44,9 @@
               ovs-vsctl set Interface dpdk$((i-1)) other_config:pmd-rxq-affinity=0:$core_list
             fi
             core_list=$(eval echo \$pmd_vm_eth$((i-1)))
-            if echo $core_list | grep -q ','; then
+            if [ -z $core_list ]; then
+              true
+            elif echo $core_list | grep -q ','; then
               core0=$(echo $core_list | awk -F ',' '{print $1}')
               core1=$(echo $core_list | awk -F ',' '{print $2}')
               ovs-vsctl set Interface ${vnic[((i-1))]} other_config:pmd-rxq-affinity="0:$core0,1:$core1"

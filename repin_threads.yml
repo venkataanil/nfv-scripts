@@ -36,22 +36,32 @@
             core_list=$(eval echo \$pmd_dpdk$((i-1)))
             if [ -z $core_list ]; then
               true
-            elif echo $core_list | grep -q ','; then
-              core0=$(echo $core_list | awk -F ',' '{print $1}')
-              core1=$(echo $core_list | awk -F ',' '{print $2}')
-              ovs-vsctl set Interface dpdk$((i-1)) options:n_rxq=2 other_config:pmd-rxq-affinity="0:$core0,1:$core1"
             else 
-              ovs-vsctl set Interface dpdk$((i-1)) other_config:pmd-rxq-affinity=0:$core_list
+              spaced_list=$(echo $core_list | sed -e 's/,/ /g') 
+              n_pmd=$(echo $spaced_list | wc -w)
+              queueID=0
+              mapping=""
+              for pmd in ${spaced_list}; do
+                mapping="$mapping,$queueID:$pmd"
+                ((queueID++))
+              done
+              mapping=`echo $mapping | sed -e 's/^,//'`
+              ovs-vsctl set Interface dpdk$((i-1)) options:n_rxq=${n_pmd} other_config:pmd-rxq-affinity=$mapping
             fi
             core_list=$(eval echo \$pmd_vm_eth$((i-1)))
             if [ -z $core_list ]; then
               true
-            elif echo $core_list | grep -q ','; then
-              core0=$(echo $core_list | awk -F ',' '{print $1}')
-              core1=$(echo $core_list | awk -F ',' '{print $2}')
-              ovs-vsctl set Interface ${vnic[((i-1))]} other_config:pmd-rxq-affinity="0:$core0,1:$core1"
             else
-              ovs-vsctl set Interface ${vnic[((i-1))]} other_config:pmd-rxq-affinity=0:$core_list
+              spaced_list=$(echo $core_list | sed -e 's/,/ /g')
+              n_pmd=$(echo $spaced_list | wc -w)
+              queueID=0
+              mapping=""
+              for pmd in ${spaced_list}; do
+                mapping="$mapping,$queueID:$pmd"
+                ((queueID++))
+              done
+              mapping=`echo $mapping | sed -e 's/^,//'`
+              ovs-vsctl set Interface ${vnic[((i-1))]} other_config:pmd-rxq-affinity=$mapping
             fi
           done
         fi

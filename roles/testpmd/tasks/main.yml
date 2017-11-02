@@ -17,10 +17,14 @@
                     --rxq=1 --txq=1 --rxd=256 --txd=256 >/tmp/testpmd"
     elif [[ {{ testpmd_fwd }} == "io" ]]; then
       if [[ {{ mqueue }} == "true" ]]; then
-        testpmd_cmd="testpmd -l 0,2,3,4,5 --socket-mem 1024 -n 4 --proc-type auto \
+        intQueues={{vm_int_queues}}
+        fwdCores=$((intQueues*2))
+        topCpu=$((fwdCores+2-1))
+        fwdCoreList=$(seq --separator="," 2 $topCpu)
+        testpmd_cmd="testpmd -l 0,$fwdCoreList --socket-mem 1024 -n 4 --proc-type auto \
                  --file-prefix pg -w 00:04.0 -w 00:05.0 \
-                 -- --nb-cores=4 --nb-ports=2 --portmask=3  --auto-start \
-                    --rxq=2 --txq=2 --rxd=256 --txd=256 >/tmp/testpmd"
+                 -- --nb-cores=$fwdCores --nb-ports=2 --portmask=3  --auto-start \
+                    --rxq=$intQueues --txq=$intQueues --rxd=256 --txd=256 >/tmp/testpmd"
       else 
         testpmd_cmd="testpmd -l 0,2,4 --socket-mem 1024 -n 4 --proc-type auto \
                  --file-prefix pg -w 00:04.0 -w 00:05.0 \

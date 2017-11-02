@@ -135,6 +135,14 @@ function check_input() {
     num_flows=128
   fi
 
+  if [ -z ${vm_vcpu_count+x} ]; then
+    echo "vm_vcpu_count not set, default to: 6"
+    vm_vcpu_count=6
+  fi
+  if (( vm_vcpu_count < 6 )); then
+    error "vm_vcpu_count: ${vm_vcpu_count} invalid, needs at least 6"
+  fi
+
   if [ -z ${enable_multi_queue+x} ]; then
     enable_multi_queue=false
   fi
@@ -351,7 +359,7 @@ fi
 echo "##### updating project quota"
 project_id=$(openstack project show -f value -c id admin)
 nova quota-update --instances $num_vm $project_id
-nova quota-update --cores $(( $num_vm * 6 )) $project_id
+nova quota-update --cores $(( $num_vm * 10 )) $project_id
 neutron quota-update --tenant_id $project_id --network $(( $num_vm + 2 ))
 neutron quota-update --tenant_id $project_id --subnet $(( $num_vm + 2 ))
 
@@ -365,10 +373,10 @@ if openstack flavor list | grep nfv; then
   openstack flavor delete nfv
 fi
 
-# 6 vcpu to make sure the HT sibling not used by instance; an alternative, might be used hw:cpu_thread_policy=isolate, --vcpus 3 (rather than 6)
+#  default vm_vcpu_count=6 to make sure the HT sibling not used by instance; an alternative, might be used hw:cpu_thread_policy=isolate, --vcpus 3 (rather than 6)
 echo "##### creating nfv flavor"
 
-openstack flavor create nfv --id 1 --ram 4096 --disk 20 --vcpus 6
+openstack flavor create nfv --id 1 --ram 4096 --disk 20 --vcpus ${vm_vcpu_count} 
 
 # no need to set numa topo
 #  nova flavor-key 1 set hw:cpu_policy=dedicated \
@@ -620,8 +628,9 @@ get_mac_from_pci_slot ${traffic_gen_src_slot} traffic_src_mac
 get_mac_from_pci_slot ${traffic_gen_dst_slot} traffic_dst_mac
 echo traffic_src_mac=${traffic_src_mac} traffic_dst_mac=${traffic_dst_mac}
 
+vm_int_queues=$(echo ${pmd_dpdk1} | sed -e 's/,/ /g' | wc -w)
 echo "##### provision nfv work load"
-ansible-playbook -i $nodes ${SCRIPT_PATH}/nfv.yml --extra-vars "run_pbench=${run_pbench} traffic_src_mac=${traffic_src_mac} traffic_dst_mac=${traffic_dst_mac} routing=${routing} testpmd_fwd=${testpmd_fwd} num_vm=${num_vm} mqueue=${enable_multi_queue}" || error "failed to run NFV application"
+ansible-playbook -i $nodes ${SCRIPT_PATH}/nfv.yml --extra-vars "run_pbench=${run_pbench} traffic_src_mac=${traffic_src_mac} traffic_dst_mac=${traffic_dst_mac} routing=${routing} testpmd_fwd=${testpmd_fwd} num_vm=${num_vm} vm_vcpu_count=${vm_vcpu_count} mqueue=${enable_multi_queue} vm_int_queues=${vm_int_queues}" || error "failed to run NFV application"
 
 
 # running traffic

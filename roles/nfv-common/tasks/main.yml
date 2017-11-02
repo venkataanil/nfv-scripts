@@ -10,9 +10,10 @@
     yum install -y tuned
     yum install -y tuned-profiles-cpu-partitioning
     sed -i -r '/^isolated_cores/d' /etc/tuned/cpu-partitioning-variables.conf
-    echo isolated_cores=2-5 >> /etc/tuned/cpu-partitioning-variables.conf
+    topcpu=$(( {{vm_vcpu_count}} - 1 ))
+    echo isolated_cores=2-$topcpu >> /etc/tuned/cpu-partitioning-variables.conf
     tuned-adm profile cpu-partitioning
-    grubby --update-kernel=`grubby --default-kernel` --args="default_hugepagesz=1G hugepagesz=1G hugepages=1 isolcpus=2-5 ipv6.disable=1"
+    grubby --update-kernel=`grubby --default-kernel` --args="default_hugepagesz=1G hugepagesz=1G hugepages=1 isolcpus=2-$topcpu ipv6.disable=1"
 - name: reboot and get a clean start
   shell: "nohup sh -c '( sleep 5 ; shutdown -r now )' &"
   async: 0

@@ -1,0 +1,1152 @@
+++ export ANSIBLE_HOST_KEY_CHECKING=False
+++ ANSIBLE_HOST_KEY_CHECKING=False
++++ dirname ./run-pbench.sh
+++ SCRIPT_PATH=.
++++ cd .
++++ pwd
+++ SCRIPT_PATH=/home/stack/nfv-scripts
+++ echo '##### loading nfv_test.cfg'
+##### loading nfv_test.cfg
+++ '[' '!' -f /home/stack/nfv-scripts/nfv_test.cfg ']'
+++ source /home/stack/nfv-scripts/nfv_test.cfg
++++ dns_server=10.35.28.28
++++ num_vm=1
++++ overcloudrc=/home/stack/overcloudrc
++++ stackrc=/home/stack/stackrc
++++ vm_image_name=nfv
++++ nfv_tmp_dir=/tmp/nfv
++++ vm_image_file=rhel.qcow2
++++ vm_image_url=/home/stack/rhel-guest-image-7.3-36.x86_64.qcow2
++++ access_network_type=vlan
++++ access_network_vlan=200
++++ provider_network_type=flat
++++ data_vlan_start=300
++++ traffic_gen=trex-txrx
++++ traffic_gen_src_slot=01:00.0
++++ traffic_gen_dst_slot=01:00.1
++++ traffic_loss_pct=0.02
++++ data_pkt_size=64
++++ search_runtime=60
++++ validation_runtime=120
++++ samples=10
++++ num_flows=128
++++ traffic_direction=bidirec
++++ repin_ovs_nonpmd=false
++++ repin_kvm_emulator=true
++++ routing=testpmd
++++ testpmd_fwd=io
++++ run_traffic_gen=true
++++ traffic_gen_extra_opt='--skip-git-pull --flow-mods=src-ip --rate=5'
++++ run_pbench=true
++++ stop_pbench_after=false
++++ pbench_comupte_tools='proc-interrupts sar openvswitch'
++++ pbench_vm_tools='proc-interrupts sar'
++++ ftrace_host=y
++++ ftrace_vm=y
++++ cleanup=false
++++ pbench_report_prefix=OSP12-direct-srcip_flows
++++ enable_HT=true
++++ enable_multi_queue=false
++++ repin_ovs_pmd=true
++++ pmd_vm_eth0=1
++++ pmd_vm_eth1=2
++++ pmd_vm_eth2=4
++++ pmd_dpdk0=26
++++ pmd_dpdk1=28
++++ pmd_dpdk2=3
++++ spare_cores=
+++ [[ ! -z '' ]]
+++ shopt -s nocasematch
+++ source /home/stack/nfv-scripts/core_util_functions
+++ echo '##### sanity check input parameters'
+##### sanity check input parameters
+++ check_input
+++ '[' -z x ']'
+++ ((  num_vm > 99  ))
+++ '[' -z x ']'
+++ '[' -z ']'
+++ echo 'vm_vcpu_count not set, default to: 6'
+vm_vcpu_count not set, default to: 6
+++ vm_vcpu_count=6
+++ ((  vm_vcpu_count < 6  ))
+++ '[' -z x ']'
+++ '[' -z x ']'
+++ '[' -z x ']'
+++ [[ flat == \v\l\a\n ]]
+++ [[ flat == \v\x\l\a\n ]]
+++ [[ flat == \f\l\a\t ]]
+++ [[ vlan == \s\h\a\r\e\d ]]
+++ [[ vlan == \v\l\a\n ]]
+++ [[ -z 200 ]]
+++ [[ testpmd == \t\e\s\t\p\m\d ]]
+++ [[ '' == \s\r\i\o\v ]]
+++ [[ testpmd == \t\e\s\t\p\m\d ]]
+++ [[ -z io ]]
+++ case ${testpmd_fwd} in
+++ case ${traffic_direction} in
+++ '[' -z x ']'
+++ '[' -z x ']'
+++ source /home/stack/overcloudrc
+++++ set
+++++ awk '{FS="="}  /^OS_/ {print $1}'
++++ export OS_USERNAME=admin
++++ OS_USERNAME=admin
++++ export OS_BAREMETAL_API_VERSION=1.34
++++ OS_BAREMETAL_API_VERSION=1.34
++++ export NOVA_VERSION=1.1
++++ NOVA_VERSION=1.1
++++ export OS_PROJECT_NAME=admin
++++ OS_PROJECT_NAME=admin
++++ export OS_PASSWORD=4dd8AvvWR8RDhpRQ4tzCHRkYM
++++ OS_PASSWORD=4dd8AvvWR8RDhpRQ4tzCHRkYM
++++ export OS_NO_CACHE=True
++++ OS_NO_CACHE=True
++++ export COMPUTE_API_VERSION=1.1
++++ COMPUTE_API_VERSION=1.1
++++ export no_proxy=,172.21.0.55,192.168.24.63
++++ no_proxy=,172.21.0.55,192.168.24.63
++++ export OS_VOLUME_API_VERSION=3
++++ OS_VOLUME_API_VERSION=3
++++ export OS_CLOUDNAME=overcloud
++++ OS_CLOUDNAME=overcloud
++++ export OS_AUTH_URL=http://172.21.0.55:5000/v2.0
++++ OS_AUTH_URL=http://172.21.0.55:5000/v2.0
++++ export IRONIC_API_VERSION=1.34
++++ IRONIC_API_VERSION=1.34
++++ export OS_IMAGE_API_VERSION=2
++++ OS_IMAGE_API_VERSION=2
++++ export OS_AUTH_TYPE=password
++++ OS_AUTH_TYPE=password
++++ export 'PYTHONWARNINGS=ignore:Certificate has no, ignore:A true SSLContext object is not available'
++++ PYTHONWARNINGS='ignore:Certificate has no, ignore:A true SSLContext object is not available'
++++ '[' -z '' ']'
++++ export PS1=
++++ PS1=
++++ export 'PS1=${OS_CLOUDNAME:+($OS_CLOUDNAME)} '
++++ PS1='${OS_CLOUDNAME:+($OS_CLOUDNAME)} '
++++ export CLOUDPROMPT_ENABLED=1
++++ CLOUDPROMPT_ENABLED=1
+++ declare -a vmState
+++ [[ '' == \s\r\i\o\v ]]
+++ vnic_option=
+++ echo '##### starting instances'
+##### starting instances
+++ tmpfile=/home/stack/nfv-scripts/tmpfile
+++ echo '##### update /etc/hosts entry with instance names'
+##### update /etc/hosts entry with instance names
+++ sudo sed -i -r /vm/d /etc/hosts
+++ sudo sed -i -r /demo/d /etc/hosts
+++ nova list
+++ sudo sed -n -r 's/.*(demo[0-9]+).*access=([.0-9]+).*/\2 \1/p'
+++ sudo tee --append /etc/hosts
+++ echo '##### remove old entries in known_hosts'
+##### remove old entries in known_hosts
++++ seq 1
+++ for i in '$(seq $num_vm)'
+++ sudo sed -i -r /demo1/d /root/.ssh/known_hosts
+++ sudo sed -i -r /demo1/d /home/stack/.ssh/known_hosts
++++ grep demo1 /etc/hosts
++++ awk '{print $1}'
+++ vm_ip=10.1.1.12
+++ sudo sed -i -r /10.1.1.12/d /root/.ssh/known_hosts
+++ sudo sed -i -r /10.1.1.12/d /home/stack/.ssh/known_hosts
+++ nodes=/home/stack/nfv-scripts/nodes
+++ echo '##### record ansible hosts access info in /home/stack/nfv-scripts/nodes'
+##### record ansible hosts access info in /home/stack/nfv-scripts/nodes
+++ echo '[VMs]'
+++ nova list
+++ sed -n -r 's/.*(demo[0-9]+).*access=([.0-9]+).*/\1 ansible_host=\2/ p'
+++ cat
+++ source /home/stack/stackrc
+++++ set
+++++ awk '{FS="="}  /^OS_/ {print $1}'
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_AUTH_TYPE
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_AUTH_URL
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_BAREMETAL_API_VERSION
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_CLOUDNAME
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_IMAGE_API_VERSION
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_NO_CACHE
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_PASSWORD
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_PROJECT_NAME
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_USERNAME
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_VOLUME_API_VERSION
++++ NOVA_VERSION=1.1
++++ export NOVA_VERSION
+++++ sudo hiera admin_password
++++ OS_PASSWORD=eab80f810aa083031608cd32b2b6ff71ed8b8821
++++ export OS_PASSWORD
++++ OS_AUTH_TYPE=password
++++ export OS_AUTH_TYPE
++++ OS_AUTH_URL=http://192.168.24.1:5000/
++++ export OS_AUTH_URL
++++ OS_USERNAME=admin
++++ OS_PROJECT_NAME=admin
++++ COMPUTE_API_VERSION=1.1
++++ IRONIC_API_VERSION=1.34
++++ OS_BAREMETAL_API_VERSION=1.34
++++ OS_NO_CACHE=True
++++ OS_CLOUDNAME=undercloud
++++ export OS_USERNAME
++++ export OS_PROJECT_NAME
++++ export COMPUTE_API_VERSION
++++ export IRONIC_API_VERSION
++++ export OS_BAREMETAL_API_VERSION
++++ export OS_NO_CACHE
++++ export OS_CLOUDNAME
++++ OS_IDENTITY_API_VERSION=3
++++ export OS_IDENTITY_API_VERSION
++++ OS_PROJECT_DOMAIN_NAME=Default
++++ export OS_PROJECT_DOMAIN_NAME
++++ OS_USER_DOMAIN_NAME=Default
++++ export OS_USER_DOMAIN_NAME
++++ '[' -z 1 ']'
+++ echo '[computes]'
+++ nova list
+++ sed -n -r 's/.*compute.*ctlplane=([.0-9]+).*/\1/ p'
+++ echo '[controllers]'
+++ nova list
+++ sed -n -r 's/.*control.*ctlplane=([.0-9]+).*/\1/ p'
+++ cat
+++ echo '##### testing instances access via ping'
+##### testing instances access via ping
++++ seq 30
+++ for n in '$(seq 30)'
+++ reachable=1
++++ seq 1
+++ for i in '$(seq $num_vm)'
+++ ping -q -c5 demo1
+PING demo1 (10.1.1.12) 56(84) bytes of data.
+
+--- demo1 ping statistics ---
+5 packets transmitted, 5 received, 0% packet loss, time 3999ms
+rtt min/avg/max/mdev = 0.055/0.079/0.158/0.040 ms
+++ '[' 1 -eq 1 ']'
+++ break
+++ '[' 1 -eq 1 ']'
+++ echo '##### testing instances access via ssh'
+##### testing instances access via ssh
++++ seq 90
+++ for n in '$(seq 90)'
+++ reachable=1
++++ seq 1
+++ for i in '$(seq $num_vm)'
+++ timeout 1 bash -c 'cat < /dev/null > /dev/tcp/demo1/22'
+++ '[' 1 -eq 1 ']'
+++ break
+++ '[' 1 -eq 1 ']'
+++ echo '##### update authorized ssh key'
+##### update authorized ssh key
+++ [[ -z '' ]]
+++ groups=(computes controllers VMs)
+++ for host in '${groups[@]}'
+++ [[ computes != \V\M\s ]]
+++ clouduser=heat-admin
+++ [[ stack == \s\t\a\c\k ]]
++++ sudo cat /home/stack/.ssh/id_rsa.pub
++++ sudo cat /root/.ssh/id_rsa.pub
+++ ANSIBLE_HOST_KEY_CHECKING=False
+++ UserKnownHostsFile=/dev/null
+++ ansible computes -i /home/stack/nfv-scripts/nodes -m shell -a '> /root/.ssh/authorized_keys; echo ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC1Fk/72frxYnjtfn/7dgw/R5Yz2VTS53+z/SW+RaMXdY2NPc2AFOAFKVfjG3Vojlb5yivpvEuDY5eIk2p2lmiMys3QXCnn1wvEIn02+dezuz/Sf70+UEp6AE9JLae/iLXKQR6VeayXLPn40wEBD/zFl5oNDuchy9EQ/VDoZ+bOf2ce4eRJR4LCvZvQ4+BzzbEFZsOLqzh6t2TAkuI4crRVJMhG6iosC+vZ07myjE35syYmEbs1G7g6T862LtPDypNzUvTseGFuxk6Cl2cUhi9DTvVJ2A+ThflbFJ+1Ew7R5ZLo2TSGNn1lfPgnRaFMMASbW8mkfajoflHsAGBNG6Rh stack@perf98.perf.lab.eng.bos.redhat.com >> /root/.ssh/authorized_keys; echo ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAAgQCujzbZlAGOW+uzv4AEUZbAnNQQYUJ6AGwNwmzrhjYRuu4xD7EFVytnBmS4Sv6LuChew3xCNOcoUGg6x32m//jSMbjk+46q29tx6U6ZOXff3soZKAX4JMitA/iwZECMFgtLMbCRxHJdbX3pVc3deDSeuSp0TxOMGO7R+H7FKpoKtQ== root@perf98.perf.lab.eng.bos.redhat.com >> /root/.ssh/authorized_keys'
+192.168.24.54 | SUCCESS | rc=0 >>
+
+++ ANSIBLE_HOST_KEY_CHECKING=False
+++ UserKnownHostsFile=/dev/null
+++ ansible computes -i /home/stack/nfv-scripts/nodes -m lineinfile -a 'name=/etc/ssh/sshd_config regexp='\''^UseDNS'\'' line='\''UseDNS no'\'''
+192.168.24.54 | SUCCESS => {
+    "backup": "", 
+    "changed": false, 
+    "failed": false, 
+    "msg": ""
+}
+++ ANSIBLE_HOST_KEY_CHECKING=False
+++ UserKnownHostsFile=/dev/null
+++ ansible computes -i /home/stack/nfv-scripts/nodes -m service -a 'name=sshd state=restarted'
+192.168.24.54 | SUCCESS => {
+    "changed": true, 
+    "failed": false, 
+    "name": "sshd", 
+    "state": "started", 
+    "status": {
+        "ActiveEnterTimestamp": "Tue 2017-12-12 15:21:26 UTC", 
+        "ActiveEnterTimestampMonotonic": "418068372865", 
+        "ActiveExitTimestamp": "Tue 2017-12-12 15:21:26 UTC", 
+        "ActiveExitTimestampMonotonic": "418068337670", 
+        "ActiveState": "active", 
+        "After": "cloud-init.service basic.target sshd-keygen.service system.slice network.target systemd-journald.socket", 
+        "AllowIsolate": "no", 
+        "AmbientCapabilities": "0", 
+        "AssertResult": "yes", 
+        "AssertTimestamp": "Tue 2017-12-12 15:21:26 UTC", 
+        "AssertTimestampMonotonic": "418068356864", 
+        "Before": "shutdown.target multi-user.target", 
+        "BlockIOAccounting": "no", 
+        "BlockIOWeight": "18446744073709551615", 
+        "CPUAccounting": "no", 
+        "CPUQuotaPerSecUSec": "infinity", 
+        "CPUSchedulingPolicy": "0", 
+        "CPUSchedulingPriority": "0", 
+        "CPUSchedulingResetOnFork": "no", 
+        "CPUShares": "18446744073709551615", 
+        "CanIsolate": "no", 
+        "CanReload": "yes", 
+        "CanStart": "yes", 
+        "CanStop": "yes", 
+        "CapabilityBoundingSet": "18446744073709551615", 
+        "ConditionResult": "yes", 
+        "ConditionTimestamp": "Tue 2017-12-12 15:21:26 UTC", 
+        "ConditionTimestampMonotonic": "418068356864", 
+        "ConflictedBy": "sshd.socket", 
+        "Conflicts": "shutdown.target", 
+        "ConsistsOf": "sshd-keygen.service", 
+        "ControlGroup": "/system.slice/sshd.service", 
+        "ControlPID": "0", 
+        "DefaultDependencies": "yes", 
+        "Delegate": "no", 
+        "Description": "OpenSSH server daemon", 
+        "DevicePolicy": "auto", 
+        "Documentation": "man:sshd(8) man:sshd_config(5)", 
+        "EnvironmentFile": "/etc/sysconfig/sshd (ignore_errors=no)", 
+        "ExecMainCode": "0", 
+        "ExecMainExitTimestampMonotonic": "0", 
+        "ExecMainPID": "837048", 
+        "ExecMainStartTimestamp": "Tue 2017-12-12 15:21:26 UTC", 
+        "ExecMainStartTimestampMonotonic": "418068358949", 
+        "ExecMainStatus": "0", 
+        "ExecReload": "{ path=/bin/kill ; argv[]=/bin/kill -HUP $MAINPID ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; pid=0 ; code=(null) ; status=0/0 }", 
+        "ExecStart": "{ path=/usr/sbin/sshd ; argv[]=/usr/sbin/sshd -D $OPTIONS ; ignore_errors=no ; start_time=[Tue 2017-12-12 15:21:26 UTC] ; stop_time=[n/a] ; pid=837048 ; code=(null) ; status=0/0 }", 
+        "FailureAction": "none", 
+        "FileDescriptorStoreMax": "0", 
+        "FragmentPath": "/usr/lib/systemd/system/sshd.service", 
+        "GuessMainPID": "yes", 
+        "IOScheduling": "0", 
+        "Id": "sshd.service", 
+        "IgnoreOnIsolate": "no", 
+        "IgnoreOnSnapshot": "no", 
+        "IgnoreSIGPIPE": "yes", 
+        "InactiveEnterTimestamp": "Tue 2017-12-12 15:21:26 UTC", 
+        "InactiveEnterTimestampMonotonic": "418068344689", 
+        "InactiveExitTimestamp": "Tue 2017-12-12 15:21:26 UTC", 
+        "InactiveExitTimestampMonotonic": "418068358975", 
+        "JobTimeoutAction": "none", 
+        "JobTimeoutUSec": "0", 
+        "KillMode": "process", 
+        "KillSignal": "15", 
+        "LimitAS": "18446744073709551615", 
+        "LimitCORE": "18446744073709551615", 
+        "LimitCPU": "18446744073709551615", 
+        "LimitDATA": "18446744073709551615", 
+        "LimitFSIZE": "18446744073709551615", 
+        "LimitLOCKS": "18446744073709551615", 
+        "LimitMEMLOCK": "65536", 
+        "LimitMSGQUEUE": "819200", 
+        "LimitNICE": "0", 
+        "LimitNOFILE": "4096", 
+        "LimitNPROC": "899332", 
+        "LimitRSS": "18446744073709551615", 
+        "LimitRTPRIO": "0", 
+        "LimitRTTIME": "18446744073709551615", 
+        "LimitSIGPENDING": "899332", 
+        "LimitSTACK": "18446744073709551615", 
+        "LoadState": "loaded", 
+        "MainPID": "837048", 
+        "MemoryAccounting": "no", 
+        "MemoryCurrent": "2260992", 
+        "MemoryLimit": "18446744073709551615", 
+        "MountFlags": "0", 
+        "Names": "sshd.service", 
+        "NeedDaemonReload": "no", 
+        "Nice": "0", 
+        "NoNewPrivileges": "no", 
+        "NonBlocking": "no", 
+        "NotifyAccess": "main", 
+        "OOMScoreAdjust": "0", 
+        "OnFailureJobMode": "replace", 
+        "PermissionsStartOnly": "no", 
+        "PrivateDevices": "no", 
+        "PrivateNetwork": "no", 
+        "PrivateTmp": "no", 
+        "ProtectHome": "no", 
+        "ProtectSystem": "no", 
+        "RefuseManualStart": "no", 
+        "RefuseManualStop": "no", 
+        "RemainAfterExit": "no", 
+        "Requires": "basic.target", 
+        "Restart": "on-failure", 
+        "RestartUSec": "42s", 
+        "Result": "success", 
+        "RootDirectoryStartOnly": "no", 
+        "RuntimeDirectoryMode": "0755", 
+        "SameProcessGroup": "no", 
+        "SecureBits": "0", 
+        "SendSIGHUP": "no", 
+        "SendSIGKILL": "yes", 
+        "Slice": "system.slice", 
+        "StandardError": "inherit", 
+        "StandardInput": "null", 
+        "StandardOutput": "journal", 
+        "StartLimitAction": "none", 
+        "StartLimitBurst": "5", 
+        "StartLimitInterval": "10000000", 
+        "StartupBlockIOWeight": "18446744073709551615", 
+        "StartupCPUShares": "18446744073709551615", 
+        "StatusErrno": "0", 
+        "StopWhenUnneeded": "no", 
+        "SubState": "running", 
+        "SyslogLevelPrefix": "yes", 
+        "SyslogPriority": "30", 
+        "SystemCallErrorNumber": "0", 
+        "TTYReset": "no", 
+        "TTYVHangup": "no", 
+        "TTYVTDisallocate": "no", 
+        "TasksAccounting": "no", 
+        "TasksCurrent": "18446744073709551615", 
+        "TasksMax": "18446744073709551615", 
+        "TimeoutStartUSec": "1min 30s", 
+        "TimeoutStopUSec": "1min 30s", 
+        "TimerSlackNSec": "50000", 
+        "Transient": "no", 
+        "Type": "notify", 
+        "UMask": "0022", 
+        "UnitFilePreset": "enabled", 
+        "UnitFileState": "enabled", 
+        "WantedBy": "multi-user.target cloud-init.service", 
+        "Wants": "sshd-keygen.service system.slice", 
+        "WatchdogTimestamp": "Tue 2017-12-12 15:21:26 UTC", 
+        "WatchdogTimestampMonotonic": "418068372831", 
+        "WatchdogUSec": "0"
+    }
+}
++++ sudo cat /root/.ssh/id_rsa.pub
+++ ANSIBLE_HOST_KEY_CHECKING=False
+++ UserKnownHostsFile=/dev/null
+++ ansible computes -i /home/stack/nfv-scripts/nodes -m shell -a 'echo ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAAgQCujzbZlAGOW+uzv4AEUZbAnNQQYUJ6AGwNwmzrhjYRuu4xD7EFVytnBmS4Sv6LuChew3xCNOcoUGg6x32m//jSMbjk+46q29tx6U6ZOXff3soZKAX4JMitA/iwZECMFgtLMbCRxHJdbX3pVc3deDSeuSp0TxOMGO7R+H7FKpoKtQ== root@perf98.perf.lab.eng.bos.redhat.com >> /home/heat-admin/.ssh/authorized_keys'
+192.168.24.54 | SUCCESS | rc=0 >>
+
+++ for host in '${groups[@]}'
+++ [[ controllers != \V\M\s ]]
+++ clouduser=heat-admin
+++ [[ stack == \s\t\a\c\k ]]
++++ sudo cat /home/stack/.ssh/id_rsa.pub
++++ sudo cat /root/.ssh/id_rsa.pub
+++ ANSIBLE_HOST_KEY_CHECKING=False
+++ UserKnownHostsFile=/dev/null
+++ ansible controllers -i /home/stack/nfv-scripts/nodes -m shell -a '> /root/.ssh/authorized_keys; echo ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC1Fk/72frxYnjtfn/7dgw/R5Yz2VTS53+z/SW+RaMXdY2NPc2AFOAFKVfjG3Vojlb5yivpvEuDY5eIk2p2lmiMys3QXCnn1wvEIn02+dezuz/Sf70+UEp6AE9JLae/iLXKQR6VeayXLPn40wEBD/zFl5oNDuchy9EQ/VDoZ+bOf2ce4eRJR4LCvZvQ4+BzzbEFZsOLqzh6t2TAkuI4crRVJMhG6iosC+vZ07myjE35syYmEbs1G7g6T862LtPDypNzUvTseGFuxk6Cl2cUhi9DTvVJ2A+ThflbFJ+1Ew7R5ZLo2TSGNn1lfPgnRaFMMASbW8mkfajoflHsAGBNG6Rh stack@perf98.perf.lab.eng.bos.redhat.com >> /root/.ssh/authorized_keys; echo ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAAgQCujzbZlAGOW+uzv4AEUZbAnNQQYUJ6AGwNwmzrhjYRuu4xD7EFVytnBmS4Sv6LuChew3xCNOcoUGg6x32m//jSMbjk+46q29tx6U6ZOXff3soZKAX4JMitA/iwZECMFgtLMbCRxHJdbX3pVc3deDSeuSp0TxOMGO7R+H7FKpoKtQ== root@perf98.perf.lab.eng.bos.redhat.com >> /root/.ssh/authorized_keys'
+192.168.24.56 | SUCCESS | rc=0 >>
+
+++ ANSIBLE_HOST_KEY_CHECKING=False
+++ UserKnownHostsFile=/dev/null
+++ ansible controllers -i /home/stack/nfv-scripts/nodes -m lineinfile -a 'name=/etc/ssh/sshd_config regexp='\''^UseDNS'\'' line='\''UseDNS no'\'''
+192.168.24.56 | SUCCESS => {
+    "backup": "", 
+    "changed": false, 
+    "failed": false, 
+    "msg": ""
+}
+++ ANSIBLE_HOST_KEY_CHECKING=False
+++ UserKnownHostsFile=/dev/null
+++ ansible controllers -i /home/stack/nfv-scripts/nodes -m service -a 'name=sshd state=restarted'
+192.168.24.56 | SUCCESS => {
+    "changed": true, 
+    "failed": false, 
+    "name": "sshd", 
+    "state": "started", 
+    "status": {
+        "ActiveEnterTimestamp": "Tue 2017-12-12 15:21:39 UTC", 
+        "ActiveEnterTimestampMonotonic": "608759807755", 
+        "ActiveExitTimestamp": "Tue 2017-12-12 15:21:39 UTC", 
+        "ActiveExitTimestampMonotonic": "608759774297", 
+        "ActiveState": "active", 
+        "After": "systemd-journald.socket network.target sshd-keygen.service system.slice basic.target cloud-init.service", 
+        "AllowIsolate": "no", 
+        "AmbientCapabilities": "0", 
+        "AssertResult": "yes", 
+        "AssertTimestamp": "Tue 2017-12-12 15:21:39 UTC", 
+        "AssertTimestampMonotonic": "608759795876", 
+        "Before": "multi-user.target shutdown.target", 
+        "BlockIOAccounting": "no", 
+        "BlockIOWeight": "18446744073709551615", 
+        "CPUAccounting": "no", 
+        "CPUQuotaPerSecUSec": "infinity", 
+        "CPUSchedulingPolicy": "0", 
+        "CPUSchedulingPriority": "0", 
+        "CPUSchedulingResetOnFork": "no", 
+        "CPUShares": "18446744073709551615", 
+        "CanIsolate": "no", 
+        "CanReload": "yes", 
+        "CanStart": "yes", 
+        "CanStop": "yes", 
+        "CapabilityBoundingSet": "18446744073709551615", 
+        "ConditionResult": "yes", 
+        "ConditionTimestamp": "Tue 2017-12-12 15:21:39 UTC", 
+        "ConditionTimestampMonotonic": "608759795876", 
+        "ConflictedBy": "sshd.socket", 
+        "Conflicts": "shutdown.target", 
+        "ConsistsOf": "sshd-keygen.service", 
+        "ControlGroup": "/system.slice/sshd.service", 
+        "ControlPID": "0", 
+        "DefaultDependencies": "yes", 
+        "Delegate": "no", 
+        "Description": "OpenSSH server daemon", 
+        "DevicePolicy": "auto", 
+        "Documentation": "man:sshd(8) man:sshd_config(5)", 
+        "EnvironmentFile": "/etc/sysconfig/sshd (ignore_errors=no)", 
+        "ExecMainCode": "0", 
+        "ExecMainExitTimestampMonotonic": "0", 
+        "ExecMainPID": "647882", 
+        "ExecMainStartTimestamp": "Tue 2017-12-12 15:21:39 UTC", 
+        "ExecMainStartTimestampMonotonic": "608759797543", 
+        "ExecMainStatus": "0", 
+        "ExecReload": "{ path=/bin/kill ; argv[]=/bin/kill -HUP $MAINPID ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; pid=0 ; code=(null) ; status=0/0 }", 
+        "ExecStart": "{ path=/usr/sbin/sshd ; argv[]=/usr/sbin/sshd -D $OPTIONS ; ignore_errors=no ; start_time=[Tue 2017-12-12 15:21:39 UTC] ; stop_time=[n/a] ; pid=647882 ; code=(null) ; status=0/0 }", 
+        "FailureAction": "none", 
+        "FileDescriptorStoreMax": "0", 
+        "FragmentPath": "/usr/lib/systemd/system/sshd.service", 
+        "GuessMainPID": "yes", 
+        "IOScheduling": "0", 
+        "Id": "sshd.service", 
+        "IgnoreOnIsolate": "no", 
+        "IgnoreOnSnapshot": "no", 
+        "IgnoreSIGPIPE": "yes", 
+        "InactiveEnterTimestamp": "Tue 2017-12-12 15:21:39 UTC", 
+        "InactiveEnterTimestampMonotonic": "608759784764", 
+        "InactiveExitTimestamp": "Tue 2017-12-12 15:21:39 UTC", 
+        "InactiveExitTimestampMonotonic": "608759797569", 
+        "JobTimeoutAction": "none", 
+        "JobTimeoutUSec": "0", 
+        "KillMode": "process", 
+        "KillSignal": "15", 
+        "LimitAS": "18446744073709551615", 
+        "LimitCORE": "18446744073709551615", 
+        "LimitCPU": "18446744073709551615", 
+        "LimitDATA": "18446744073709551615", 
+        "LimitFSIZE": "18446744073709551615", 
+        "LimitLOCKS": "18446744073709551615", 
+        "LimitMEMLOCK": "65536", 
+        "LimitMSGQUEUE": "819200", 
+        "LimitNICE": "0", 
+        "LimitNOFILE": "4096", 
+        "LimitNPROC": "1030478", 
+        "LimitRSS": "18446744073709551615", 
+        "LimitRTPRIO": "0", 
+        "LimitRTTIME": "18446744073709551615", 
+        "LimitSIGPENDING": "1030478", 
+        "LimitSTACK": "18446744073709551615", 
+        "LoadState": "loaded", 
+        "MainPID": "647882", 
+        "MemoryAccounting": "no", 
+        "MemoryCurrent": "2256896", 
+        "MemoryLimit": "18446744073709551615", 
+        "MountFlags": "0", 
+        "Names": "sshd.service", 
+        "NeedDaemonReload": "no", 
+        "Nice": "0", 
+        "NoNewPrivileges": "no", 
+        "NonBlocking": "no", 
+        "NotifyAccess": "main", 
+        "OOMScoreAdjust": "0", 
+        "OnFailureJobMode": "replace", 
+        "PermissionsStartOnly": "no", 
+        "PrivateDevices": "no", 
+        "PrivateNetwork": "no", 
+        "PrivateTmp": "no", 
+        "ProtectHome": "no", 
+        "ProtectSystem": "no", 
+        "RefuseManualStart": "no", 
+        "RefuseManualStop": "no", 
+        "RemainAfterExit": "no", 
+        "Requires": "basic.target", 
+        "Restart": "on-failure", 
+        "RestartUSec": "42s", 
+        "Result": "success", 
+        "RootDirectoryStartOnly": "no", 
+        "RuntimeDirectoryMode": "0755", 
+        "SameProcessGroup": "no", 
+        "SecureBits": "0", 
+        "SendSIGHUP": "no", 
+        "SendSIGKILL": "yes", 
+        "Slice": "system.slice", 
+        "StandardError": "inherit", 
+        "StandardInput": "null", 
+        "StandardOutput": "journal", 
+        "StartLimitAction": "none", 
+        "StartLimitBurst": "5", 
+        "StartLimitInterval": "10000000", 
+        "StartupBlockIOWeight": "18446744073709551615", 
+        "StartupCPUShares": "18446744073709551615", 
+        "StatusErrno": "0", 
+        "StopWhenUnneeded": "no", 
+        "SubState": "running", 
+        "SyslogLevelPrefix": "yes", 
+        "SyslogPriority": "30", 
+        "SystemCallErrorNumber": "0", 
+        "TTYReset": "no", 
+        "TTYVHangup": "no", 
+        "TTYVTDisallocate": "no", 
+        "TasksAccounting": "no", 
+        "TasksCurrent": "18446744073709551615", 
+        "TasksMax": "18446744073709551615", 
+        "TimeoutStartUSec": "1min 30s", 
+        "TimeoutStopUSec": "1min 30s", 
+        "TimerSlackNSec": "50000", 
+        "Transient": "no", 
+        "Type": "notify", 
+        "UMask": "0022", 
+        "UnitFilePreset": "enabled", 
+        "UnitFileState": "enabled", 
+        "WantedBy": "multi-user.target cloud-init.service", 
+        "Wants": "system.slice sshd-keygen.service", 
+        "WatchdogTimestamp": "Tue 2017-12-12 15:21:39 UTC", 
+        "WatchdogTimestampMonotonic": "608759807735", 
+        "WatchdogUSec": "0"
+    }
+}
++++ sudo cat /root/.ssh/id_rsa.pub
+++ ANSIBLE_HOST_KEY_CHECKING=False
+++ UserKnownHostsFile=/dev/null
+++ ansible controllers -i /home/stack/nfv-scripts/nodes -m shell -a 'echo ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAAgQCujzbZlAGOW+uzv4AEUZbAnNQQYUJ6AGwNwmzrhjYRuu4xD7EFVytnBmS4Sv6LuChew3xCNOcoUGg6x32m//jSMbjk+46q29tx6U6ZOXff3soZKAX4JMitA/iwZECMFgtLMbCRxHJdbX3pVc3deDSeuSp0TxOMGO7R+H7FKpoKtQ== root@perf98.perf.lab.eng.bos.redhat.com >> /home/heat-admin/.ssh/authorized_keys'
+192.168.24.56 | SUCCESS | rc=0 >>
+
+++ for host in '${groups[@]}'
+++ [[ VMs != \V\M\s ]]
+++ clouduser=cloud-user
+++ [[ stack == \s\t\a\c\k ]]
++++ sudo cat /home/stack/.ssh/id_rsa.pub
++++ sudo cat /root/.ssh/id_rsa.pub
+++ ANSIBLE_HOST_KEY_CHECKING=False
+++ UserKnownHostsFile=/dev/null
+++ ansible VMs -i /home/stack/nfv-scripts/nodes -m shell -a '> /root/.ssh/authorized_keys; echo ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC1Fk/72frxYnjtfn/7dgw/R5Yz2VTS53+z/SW+RaMXdY2NPc2AFOAFKVfjG3Vojlb5yivpvEuDY5eIk2p2lmiMys3QXCnn1wvEIn02+dezuz/Sf70+UEp6AE9JLae/iLXKQR6VeayXLPn40wEBD/zFl5oNDuchy9EQ/VDoZ+bOf2ce4eRJR4LCvZvQ4+BzzbEFZsOLqzh6t2TAkuI4crRVJMhG6iosC+vZ07myjE35syYmEbs1G7g6T862LtPDypNzUvTseGFuxk6Cl2cUhi9DTvVJ2A+ThflbFJ+1Ew7R5ZLo2TSGNn1lfPgnRaFMMASbW8mkfajoflHsAGBNG6Rh stack@perf98.perf.lab.eng.bos.redhat.com >> /root/.ssh/authorized_keys; echo ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAAgQCujzbZlAGOW+uzv4AEUZbAnNQQYUJ6AGwNwmzrhjYRuu4xD7EFVytnBmS4Sv6LuChew3xCNOcoUGg6x32m//jSMbjk+46q29tx6U6ZOXff3soZKAX4JMitA/iwZECMFgtLMbCRxHJdbX3pVc3deDSeuSp0TxOMGO7R+H7FKpoKtQ== root@perf98.perf.lab.eng.bos.redhat.com >> /root/.ssh/authorized_keys'
+demo1 | SUCCESS | rc=0 >>
+
+++ ANSIBLE_HOST_KEY_CHECKING=False
+++ UserKnownHostsFile=/dev/null
+++ ansible VMs -i /home/stack/nfv-scripts/nodes -m lineinfile -a 'name=/etc/ssh/sshd_config regexp='\''^UseDNS'\'' line='\''UseDNS no'\'''
+demo1 | SUCCESS => {
+    "backup": "", 
+    "changed": false, 
+    "failed": false, 
+    "msg": ""
+}
+++ ANSIBLE_HOST_KEY_CHECKING=False
+++ UserKnownHostsFile=/dev/null
+++ ansible VMs -i /home/stack/nfv-scripts/nodes -m service -a 'name=sshd state=restarted'
+demo1 | SUCCESS => {
+    "changed": true, 
+    "failed": false, 
+    "name": "sshd", 
+    "state": "started", 
+    "status": {
+        "ActiveEnterTimestamp": "Tue 2017-12-12 10:23:14 EST", 
+        "ActiveEnterTimestampMonotonic": "62397686", 
+        "ActiveExitTimestampMonotonic": "0", 
+        "ActiveState": "active", 
+        "After": "network.target systemd-journald.socket cloud-init.service system.slice sshd-keygen.service basic.target", 
+        "AllowIsolate": "no", 
+        "AssertResult": "yes", 
+        "AssertTimestamp": "Tue 2017-12-12 10:23:14 EST", 
+        "AssertTimestampMonotonic": "62328113", 
+        "Before": "shutdown.target multi-user.target", 
+        "BlockIOAccounting": "no", 
+        "BlockIOWeight": "18446744073709551615", 
+        "CPUAccounting": "no", 
+        "CPUQuotaPerSecUSec": "infinity", 
+        "CPUSchedulingPolicy": "0", 
+        "CPUSchedulingPriority": "0", 
+        "CPUSchedulingResetOnFork": "no", 
+        "CPUShares": "18446744073709551615", 
+        "CanIsolate": "no", 
+        "CanReload": "yes", 
+        "CanStart": "yes", 
+        "CanStop": "yes", 
+        "CapabilityBoundingSet": "18446744073709551615", 
+        "ConditionResult": "yes", 
+        "ConditionTimestamp": "Tue 2017-12-12 10:23:14 EST", 
+        "ConditionTimestampMonotonic": "62328113", 
+        "ConflictedBy": "sshd.socket", 
+        "Conflicts": "shutdown.target", 
+        "ConsistsOf": "sshd-keygen.service", 
+        "ControlGroup": "/system.slice/sshd.service", 
+        "ControlPID": "0", 
+        "DefaultDependencies": "yes", 
+        "Delegate": "no", 
+        "Description": "OpenSSH server daemon", 
+        "DevicePolicy": "auto", 
+        "Documentation": "man:sshd(8) man:sshd_config(5)", 
+        "EnvironmentFile": "/etc/sysconfig/sshd (ignore_errors=no)", 
+        "ExecMainCode": "0", 
+        "ExecMainExitTimestampMonotonic": "0", 
+        "ExecMainPID": "2105", 
+        "ExecMainStartTimestamp": "Tue 2017-12-12 10:23:14 EST", 
+        "ExecMainStartTimestampMonotonic": "62328882", 
+        "ExecMainStatus": "0", 
+        "ExecReload": "{ path=/bin/kill ; argv[]=/bin/kill -HUP $MAINPID ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; pid=0 ; code=(null) ; status=0/0 }", 
+        "ExecStart": "{ path=/usr/sbin/sshd ; argv[]=/usr/sbin/sshd -D $OPTIONS ; ignore_errors=no ; start_time=[Tue 2017-12-12 10:23:14 EST] ; stop_time=[n/a] ; pid=2105 ; code=(null) ; status=0/0 }", 
+        "FailureAction": "none", 
+        "FileDescriptorStoreMax": "0", 
+        "FragmentPath": "/usr/lib/systemd/system/sshd.service", 
+        "GuessMainPID": "yes", 
+        "IOScheduling": "0", 
+        "Id": "sshd.service", 
+        "IgnoreOnIsolate": "no", 
+        "IgnoreOnSnapshot": "no", 
+        "IgnoreSIGPIPE": "yes", 
+        "InactiveEnterTimestampMonotonic": "0", 
+        "InactiveExitTimestamp": "Tue 2017-12-12 10:23:14 EST", 
+        "InactiveExitTimestampMonotonic": "62328921", 
+        "JobTimeoutAction": "none", 
+        "JobTimeoutUSec": "0", 
+        "KillMode": "process", 
+        "KillSignal": "15", 
+        "LimitAS": "18446744073709551615", 
+        "LimitCORE": "18446744073709551615", 
+        "LimitCPU": "18446744073709551615", 
+        "LimitDATA": "18446744073709551615", 
+        "LimitFSIZE": "18446744073709551615", 
+        "LimitLOCKS": "18446744073709551615", 
+        "LimitMEMLOCK": "65536", 
+        "LimitMSGQUEUE": "819200", 
+        "LimitNICE": "0", 
+        "LimitNOFILE": "4096", 
+        "LimitNPROC": "10912", 
+        "LimitRSS": "18446744073709551615", 
+        "LimitRTPRIO": "0", 
+        "LimitRTTIME": "18446744073709551615", 
+        "LimitSIGPENDING": "10912", 
+        "LimitSTACK": "18446744073709551615", 
+        "LoadState": "loaded", 
+        "MainPID": "2105", 
+        "MemoryAccounting": "no", 
+        "MemoryCurrent": "18446744073709551615", 
+        "MemoryLimit": "18446744073709551615", 
+        "MountFlags": "0", 
+        "Names": "sshd.service", 
+        "NeedDaemonReload": "no", 
+        "Nice": "0", 
+        "NoNewPrivileges": "no", 
+        "NonBlocking": "no", 
+        "NotifyAccess": "main", 
+        "OOMScoreAdjust": "0", 
+        "OnFailureJobMode": "replace", 
+        "PermissionsStartOnly": "no", 
+        "PrivateDevices": "no", 
+        "PrivateNetwork": "no", 
+        "PrivateTmp": "no", 
+        "ProtectHome": "no", 
+        "ProtectSystem": "no", 
+        "RefuseManualStart": "no", 
+        "RefuseManualStop": "no", 
+        "RemainAfterExit": "no", 
+        "Requires": "basic.target", 
+        "Restart": "on-failure", 
+        "RestartUSec": "42s", 
+        "Result": "success", 
+        "RootDirectoryStartOnly": "no", 
+        "RuntimeDirectoryMode": "0755", 
+        "SameProcessGroup": "no", 
+        "SecureBits": "0", 
+        "SendSIGHUP": "no", 
+        "SendSIGKILL": "yes", 
+        "Slice": "system.slice", 
+        "StandardError": "inherit", 
+        "StandardInput": "null", 
+        "StandardOutput": "journal", 
+        "StartLimitAction": "none", 
+        "StartLimitBurst": "5", 
+        "StartLimitInterval": "10000000", 
+        "StartupBlockIOWeight": "18446744073709551615", 
+        "StartupCPUShares": "18446744073709551615", 
+        "StatusErrno": "0", 
+        "StopWhenUnneeded": "no", 
+        "SubState": "running", 
+        "SyslogLevelPrefix": "yes", 
+        "SyslogPriority": "30", 
+        "SystemCallErrorNumber": "0", 
+        "TTYReset": "no", 
+        "TTYVHangup": "no", 
+        "TTYVTDisallocate": "no", 
+        "TimeoutStartUSec": "1min 30s", 
+        "TimeoutStopUSec": "1min 30s", 
+        "TimerSlackNSec": "50000", 
+        "Transient": "no", 
+        "Type": "notify", 
+        "UMask": "0022", 
+        "UnitFilePreset": "enabled", 
+        "UnitFileState": "enabled", 
+        "WantedBy": "multi-user.target cloud-init.service", 
+        "Wants": "system.slice sshd-keygen.service", 
+        "WatchdogTimestamp": "Tue 2017-12-12 10:23:14 EST", 
+        "WatchdogTimestampMonotonic": "62397662", 
+        "WatchdogUSec": "0"
+    }
+}
++++ sudo cat /root/.ssh/id_rsa.pub
+++ ANSIBLE_HOST_KEY_CHECKING=False
+++ UserKnownHostsFile=/dev/null
+++ ansible VMs -i /home/stack/nfv-scripts/nodes -m shell -a 'echo ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAAgQCujzbZlAGOW+uzv4AEUZbAnNQQYUJ6AGwNwmzrhjYRuu4xD7EFVytnBmS4Sv6LuChew3xCNOcoUGg6x32m//jSMbjk+46q29tx6U6ZOXff3soZKAX4JMitA/iwZECMFgtLMbCRxHJdbX3pVc3deDSeuSp0TxOMGO7R+H7FKpoKtQ== root@perf98.perf.lab.eng.bos.redhat.com >> /home/cloud-user/.ssh/authorized_keys'
+demo1 | SUCCESS | rc=0 >>
+
+++ echo '##### getting mac address from pci slot number'
+##### getting mac address from pci slot number
+++ get_mac_from_pci_slot 01:00.0 traffic_src_mac
+++ local slot=01:00.0
+++ local __resultvar=traffic_src_mac
++++ sudo dpdk-devbind -s
++++ grep 01:00.0
+++ local 'line=0000:01:00.0 '\''82599ES 10-Gigabit SFI/SFP+ Network Connection'\'' drv=vfio-pci unused=ixgbe'
+++ local kernel_driver
+++ local mac
+++ echo 0000:01:00.0 ''\''82599ES' 10-Gigabit SFI/SFP+ Network 'Connection'\''' drv=vfio-pci unused=ixgbe
+++ grep igb
+++ echo 0000:01:00.0 ''\''82599ES' 10-Gigabit SFI/SFP+ Network 'Connection'\''' drv=vfio-pci unused=ixgbe
+++ grep i40e
+++ echo 0000:01:00.0 ''\''82599ES' 10-Gigabit SFI/SFP+ Network 'Connection'\''' drv=vfio-pci unused=ixgbe
+++ grep ixgbe
+0000:01:00.0 '82599ES 10-Gigabit SFI/SFP+ Network Connection' drv=vfio-pci unused=ixgbe
+++ kernel_driver=ixgbe
+++ sudo dpdk-devbind -u 01:00.0
+++ sudo dpdk-devbind -b ixgbe 01:00.0
++++ sudo dmesg
++++ sed -r -n 's/.*01:00.0:.*([0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2})/\1/p'
++++ tail -1
+++ mac=ec:f4:bb:dc:93:98
+++ eval traffic_src_mac=ec:f4:bb:dc:93:98
++++ traffic_src_mac=ec:f4:bb:dc:93:98
+++ lsmod
+++ grep vfio_pci
+vfio_pci               41267  0 
+vfio                   32367  2 vfio_iommu_type1,vfio_pci
+irqbypass              13503  2 kvm,vfio_pci
+++ sudo dpdk-devbind -b vfio-pci 01:00.0
+++ get_mac_from_pci_slot 01:00.1 traffic_dst_mac
+++ local slot=01:00.1
+++ local __resultvar=traffic_dst_mac
++++ sudo dpdk-devbind -s
++++ grep 01:00.1
+++ local 'line=0000:01:00.1 '\''82599ES 10-Gigabit SFI/SFP+ Network Connection'\'' drv=vfio-pci unused=ixgbe'
+++ local kernel_driver
+++ local mac
+++ echo 0000:01:00.1 ''\''82599ES' 10-Gigabit SFI/SFP+ Network 'Connection'\''' drv=vfio-pci unused=ixgbe
+++ grep igb
+++ echo 0000:01:00.1 ''\''82599ES' 10-Gigabit SFI/SFP+ Network 'Connection'\''' drv=vfio-pci unused=ixgbe
+++ grep i40e
+++ echo 0000:01:00.1 ''\''82599ES' 10-Gigabit SFI/SFP+ Network 'Connection'\''' drv=vfio-pci unused=ixgbe
+++ grep ixgbe
+0000:01:00.1 '82599ES 10-Gigabit SFI/SFP+ Network Connection' drv=vfio-pci unused=ixgbe
+++ kernel_driver=ixgbe
+++ sudo dpdk-devbind -u 01:00.1
+++ sudo dpdk-devbind -b ixgbe 01:00.1
++++ sudo dmesg
++++ sed -r -n 's/.*01:00.1:.*([0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2})/\1/p'
++++ tail -1
+++ mac=ec:f4:bb:dc:93:9a
+++ eval traffic_dst_mac=ec:f4:bb:dc:93:9a
++++ traffic_dst_mac=ec:f4:bb:dc:93:9a
+++ lsmod
+++ grep vfio_pci
+vfio_pci               41267  0 
+vfio                   32367  2 vfio_iommu_type1,vfio_pci
+irqbypass              13503  2 kvm,vfio_pci
+++ sudo dpdk-devbind -b vfio-pci 01:00.1
+++ echo traffic_src_mac=ec:f4:bb:dc:93:98 traffic_dst_mac=ec:f4:bb:dc:93:9a
+traffic_src_mac=ec:f4:bb:dc:93:98 traffic_dst_mac=ec:f4:bb:dc:93:9a
++++ echo 28
++++ sed -e 's/,/ /g'
++++ wc -w
+++ vm_int_queues=1
+++ echo '##### provision nfv work load'
+##### provision nfv work load
+++ ansible-playbook -i /home/stack/nfv-scripts/nodes /home/stack/nfv-scripts/nfv.yml --extra-vars 'run_pbench=true traffic_src_mac=ec:f4:bb:dc:93:98 traffic_dst_mac=ec:f4:bb:dc:93:9a routing=testpmd testpmd_fwd=io num_vm=1 vm_vcpu_count=6 mqueue=false vm_int_queues=1'
+
+PLAY [computes] ******************************************************************************************************************************************************************
+
+TASK [Gathering Facts] ***********************************************************************************************************************************************************
+ok: [192.168.24.54]
+
+TASK [common : install red-hat-enterprise-linux.repo] ****************************************************************************************************************************
+ok: [192.168.24.54]
+
+TASK [common : install rhel-7-common.repo] ***************************************************************************************************************************************
+ok: [192.168.24.54]
+
+TASK [common : install rhelosp-rhel-7-fast-datapth.repo] *************************************************************************************************************************
+ok: [192.168.24.54]
+
+TASK [pbench : set_fact] *********************************************************************************************************************************************************
+ok: [192.168.24.54]
+
+TASK [pbench : install optional repo] ********************************************************************************************************************************************
+ok: [192.168.24.54]
+
+TASK [pbench : install pbench repo] **********************************************************************************************************************************************
+ok: [192.168.24.54]
+
+TASK [pbench : install the pbench-agent-internal RPM itself via dnf] *************************************************************************************************************
+skipping: [192.168.24.54] => (item=[]) 
+
+TASK [pbench : install the pbench-agent-internal RPM itself via yum] *************************************************************************************************************
+ok: [192.168.24.54] => (item=[u'pbench-agent-internal', u'pbench-sysstat'])
+
+TASK [pbench-compute-fix : fix kvm-spinlock & openvswitch-datalog] ***************************************************************************************************************
+changed: [192.168.24.54]
+
+PLAY [VMs] ***********************************************************************************************************************************************************************
+
+TASK [Gathering Facts] ***********************************************************************************************************************************************************
+ok: [demo1]
+
+TASK [common : install red-hat-enterprise-linux.repo] ****************************************************************************************************************************
+ok: [demo1]
+
+TASK [common : install rhel-7-common.repo] ***************************************************************************************************************************************
+ok: [demo1]
+
+TASK [common : install rhelosp-rhel-7-fast-datapth.repo] *************************************************************************************************************************
+ok: [demo1]
+
+TASK [pbench : set_fact] *********************************************************************************************************************************************************
+ok: [demo1]
+
+TASK [pbench : install optional repo] ********************************************************************************************************************************************
+ok: [demo1]
+
+TASK [pbench : install pbench repo] **********************************************************************************************************************************************
+ok: [demo1]
+
+TASK [pbench : install the pbench-agent-internal RPM itself via dnf] *************************************************************************************************************
+skipping: [demo1] => (item=[]) 
+
+TASK [pbench : install the pbench-agent-internal RPM itself via yum] *************************************************************************************************************
+ok: [demo1] => (item=[u'pbench-agent-internal', u'pbench-sysstat'])
+
+TASK [nfv-common : update tuned and isolcpu boot parameter] **********************************************************************************************************************
+ [WARNING]: Consider using yum module rather than running yum
+changed: [demo1]
+
+TASK [nfv-common : reboot and get a clean start] *********************************************************************************************************************************
+changed: [demo1]
+
+TASK [nfv-common : Wait for Machine Ready] ***************************************************************************************************************************************
+ok: [demo1 -> localhost]
+
+TASK [vpp : update yum repo for vpp] *********************************************************************************************************************************************
+skipping: [demo1]
+
+TASK [vpp : insall vpp] **********************************************************************************************************************************************************
+skipping: [demo1]
+
+TASK [vpp : update vpp config file] **********************************************************************************************************************************************
+skipping: [demo1]
+
+TASK [vpp : config hostname and VPP routing] *************************************************************************************************************************************
+skipping: [demo1]
+
+TASK [testpmd : running testpmd in screen] ***************************************************************************************************************************************
+changed: [demo1]
+
+TASK [testpmd-sriov : running testpmd in screen] *********************************************************************************************************************************
+skipping: [demo1]
+
+PLAY [director] ******************************************************************************************************************************************************************
+
+TASK [Gathering Facts] ***********************************************************************************************************************************************************
+ok: [localhost]
+
+TASK [pbench : set_fact] *********************************************************************************************************************************************************
+ok: [localhost]
+
+TASK [pbench : install optional repo] ********************************************************************************************************************************************
+ok: [localhost]
+
+TASK [pbench : install pbench repo] **********************************************************************************************************************************************
+ok: [localhost]
+
+TASK [pbench : install the pbench-agent-internal RPM itself via dnf] *************************************************************************************************************
+skipping: [localhost] => (item=[]) 
+
+TASK [pbench : install the pbench-agent-internal RPM itself via yum] *************************************************************************************************************
+ok: [localhost] => (item=[u'pbench-agent-internal', u'pbench-sysstat'])
+
+TASK [pbench-trafficgen : git] ***************************************************************************************************************************************************
+ok: [localhost]
+
+TASK [pbench-trafficgen : file] **************************************************************************************************************************************************
+ok: [localhost] => (item=pbench-trafficgen)
+ok: [localhost] => (item=postprocess/trafficgen-postprocess)
+
+PLAY RECAP ***********************************************************************************************************************************************************************
+192.168.24.54              : ok=9    changed=1    unreachable=0    failed=0   
+demo1                      : ok=12   changed=3    unreachable=0    failed=0   
+localhost                  : ok=7    changed=0    unreachable=0    failed=0   
+
+++ [[ true == \t\r\u\e ]]
+++ [[ true == \t\r\u\e ]]
+++ echo '##### starting pbench agent'
+##### starting pbench agent
+++ start_pbench
+++ stop_pbench
+++ sudo PATH=/opt/pbench-agent/util-scripts:/opt/pbench-agent/bench-scripts:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/home/stack/.local/bin:/home/stack/bin sh -c pbench-kill-tools
+Warning: Permanently added 'demo1,10.1.1.12' (ECDSA) to the list of known hosts.
+++ sudo PATH=/opt/pbench-agent/util-scripts:/opt/pbench-agent/bench-scripts:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/home/stack/.local/bin:/home/stack/bin sh -c pbench-clear-tools
+running . /opt/pbench-agent/profile; pbench-clear-tools --group default  on 192.168.24.54
+[192.168.24.54]removing tools-default/ftrace
+[192.168.24.54]removing tools-default/openvswitch
+[192.168.24.54]removing tools-default/proc-interrupts
+[192.168.24.54]removing tools-default/sar
+The remote host 192.168.24.54 no longer has tools registered for default group, so the remote@ entry in the local tools-default directory will be removed
+/bin/rm -f tools-default/remote@192.168.24.54
+running . /opt/pbench-agent/profile; pbench-clear-tools --group default  on demo1
+[demo1]removing tools-default/proc-interrupts
+[demo1]removing tools-default/sar
+The remote host demo1 no longer has tools registered for default group, so the remote@ entry in the local tools-default directory will be removed
+/bin/rm -f tools-default/remote@demo1
+++ source /home/stack/stackrc
+++++ set
+++++ awk '{FS="="}  /^OS_/ {print $1}'
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_AUTH_TYPE
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_AUTH_URL
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_BAREMETAL_API_VERSION
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_CLOUDNAME
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_IDENTITY_API_VERSION
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_NO_CACHE
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_PASSWORD
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_PROJECT_DOMAIN_NAME
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_PROJECT_NAME
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_USERNAME
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_USER_DOMAIN_NAME
++++ NOVA_VERSION=1.1
++++ export NOVA_VERSION
+++++ sudo hiera admin_password
++++ OS_PASSWORD=eab80f810aa083031608cd32b2b6ff71ed8b8821
++++ export OS_PASSWORD
++++ OS_AUTH_TYPE=password
++++ export OS_AUTH_TYPE
++++ OS_AUTH_URL=http://192.168.24.1:5000/
++++ export OS_AUTH_URL
++++ OS_USERNAME=admin
++++ OS_PROJECT_NAME=admin
++++ COMPUTE_API_VERSION=1.1
++++ IRONIC_API_VERSION=1.34
++++ OS_BAREMETAL_API_VERSION=1.34
++++ OS_NO_CACHE=True
++++ OS_CLOUDNAME=undercloud
++++ export OS_USERNAME
++++ export OS_PROJECT_NAME
++++ export COMPUTE_API_VERSION
++++ export IRONIC_API_VERSION
++++ export OS_BAREMETAL_API_VERSION
++++ export OS_NO_CACHE
++++ export OS_CLOUDNAME
++++ OS_IDENTITY_API_VERSION=3
++++ export OS_IDENTITY_API_VERSION
++++ OS_PROJECT_DOMAIN_NAME=Default
++++ export OS_PROJECT_DOMAIN_NAME
++++ OS_USER_DOMAIN_NAME=Default
++++ export OS_USER_DOMAIN_NAME
++++ '[' -z 1 ']'
+++ echo 'start tools on computes'
+start tools on computes
++++ nova list
++++ sed -n -r 's/.*compute.*ctlplane=([.0-9]+).*/\1/ p'
+++ for node in '$(nova list | sed -n -r '\''s/.*compute.*ctlplane=([.0-9]+).*/\1/ p'\'')'
+++ for tool in '${pbench_comupte_tools}'
+++ sudo PATH=/opt/pbench-agent/util-scripts:/opt/pbench-agent/bench-scripts:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/home/stack/.local/bin:/home/stack/bin sh -c 'pbench-register-tool --remote=192.168.24.54 --name=proc-interrupts'
+[192.168.24.54]proc-interrupts tool is now registered in group default
+++ for tool in '${pbench_comupte_tools}'
+++ sudo PATH=/opt/pbench-agent/util-scripts:/opt/pbench-agent/bench-scripts:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/home/stack/.local/bin:/home/stack/bin sh -c 'pbench-register-tool --remote=192.168.24.54 --name=sar'
+[192.168.24.54]sar tool is now registered in group default
+++ for tool in '${pbench_comupte_tools}'
+++ sudo PATH=/opt/pbench-agent/util-scripts:/opt/pbench-agent/bench-scripts:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/home/stack/.local/bin:/home/stack/bin sh -c 'pbench-register-tool --remote=192.168.24.54 --name=openvswitch'
+[192.168.24.54]openvswitch tool is now registered in group default
+++ '[' y == y ']'
+++ sudo PATH=/opt/pbench-agent/util-scripts:/opt/pbench-agent/bench-scripts:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/home/stack/.local/bin:/home/stack/bin sh -c 'pbench-register-tool --remote=192.168.24.54 --name=ftrace -- --cpus=2,4,26,28,8,10'
+[192.168.24.54]ftrace tool is now registered in group default
+++ echo 'start tools on VMs'
+start tools on VMs
+++ source /home/stack/overcloudrc
+++++ set
+++++ awk '{FS="="}  /^OS_/ {print $1}'
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_AUTH_TYPE
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_AUTH_URL
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_BAREMETAL_API_VERSION
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_CLOUDNAME
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_IDENTITY_API_VERSION
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_NO_CACHE
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_PASSWORD
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_PROJECT_DOMAIN_NAME
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_PROJECT_NAME
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_USERNAME
++++ for key in '$( set | awk '\''{FS="="}  /^OS_/ {print $1}'\'' )'
++++ unset OS_USER_DOMAIN_NAME
++++ export OS_USERNAME=admin
++++ OS_USERNAME=admin
++++ export OS_BAREMETAL_API_VERSION=1.34
++++ OS_BAREMETAL_API_VERSION=1.34
++++ export NOVA_VERSION=1.1
++++ NOVA_VERSION=1.1
++++ export OS_PROJECT_NAME=admin
++++ OS_PROJECT_NAME=admin
++++ export OS_PASSWORD=4dd8AvvWR8RDhpRQ4tzCHRkYM
++++ OS_PASSWORD=4dd8AvvWR8RDhpRQ4tzCHRkYM
++++ export OS_NO_CACHE=True
++++ OS_NO_CACHE=True
++++ export COMPUTE_API_VERSION=1.1
++++ COMPUTE_API_VERSION=1.1
++++ export no_proxy=,172.21.0.55,192.168.24.63
++++ no_proxy=,172.21.0.55,192.168.24.63
++++ export OS_VOLUME_API_VERSION=3
++++ OS_VOLUME_API_VERSION=3
++++ export OS_CLOUDNAME=overcloud
++++ OS_CLOUDNAME=overcloud
++++ export OS_AUTH_URL=http://172.21.0.55:5000/v2.0
++++ OS_AUTH_URL=http://172.21.0.55:5000/v2.0
++++ export IRONIC_API_VERSION=1.34
++++ IRONIC_API_VERSION=1.34
++++ export OS_IMAGE_API_VERSION=2
++++ OS_IMAGE_API_VERSION=2
++++ export OS_AUTH_TYPE=password
++++ OS_AUTH_TYPE=password
++++ export 'PYTHONWARNINGS=ignore:Certificate has no, ignore:A true SSLContext object is not available'
++++ PYTHONWARNINGS='ignore:Certificate has no, ignore:A true SSLContext object is not available'
++++ '[' -z 1 ']'
++++ seq 1
+++ for i in '$(seq ${num_vm})'
+++ for tool in '${pbench_vm_tools}'
+++ sudo PATH=/opt/pbench-agent/util-scripts:/opt/pbench-agent/bench-scripts:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/home/stack/.local/bin:/home/stack/bin sh -c 'pbench-register-tool --remote=demo1 --name=proc-interrupts'
+[demo1]proc-interrupts tool is now registered in group default
+++ for tool in '${pbench_vm_tools}'
+++ sudo PATH=/opt/pbench-agent/util-scripts:/opt/pbench-agent/bench-scripts:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/home/stack/.local/bin:/home/stack/bin sh -c 'pbench-register-tool --remote=demo1 --name=sar'
+[demo1]sar tool is now registered in group default
+++ '[' y == y ']'
+++ sudo PATH=/opt/pbench-agent/util-scripts:/opt/pbench-agent/bench-scripts:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/home/stack/.local/bin:/home/stack/bin sh -c 'pbench-register-tool --remote=demo1 --name=ftrace -- --cpus=2,4'
+[demo1]ftrace tool is now registered in group default
+++ exit

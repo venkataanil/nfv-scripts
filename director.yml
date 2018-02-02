@@ -1,0 +1,6 @@
+- hosts: director
+  become: true
+  roles:
+    - { role: pbench }
+    - { role: pbench-trafficgen }
+

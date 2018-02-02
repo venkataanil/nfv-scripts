@@ -1,6 +1,7 @@
 ---
 - name: update tuned and isolcpu boot parameter
   shell: |
+    systemctl disable chronyd.service
     yum install -y screen
     yum install -y dpdk
     yum install -y dpdk-tools

@@ -215,7 +215,7 @@ function check_input() {
     traffic_gen_extra_opt=""
   fi 
 
-  if [ -z ${stop_pbench_after+x}]; then
+  if [ -z ${stop_pbench_after+x} ]; then
     stop_pbench_after="false"
   fi
 }
@@ -230,7 +230,8 @@ function start_pbench () {
   stop_pbench
   source ${stackrc} || error "can't load stackrc"
   echo "start tools on computes"
-  for node in $(nova list | sed -n -r 's/.*compute.*ctlplane=([.0-9]+).*/\1/ p'); do
+  ###for node in $(nova list | sed -n -r 's/.*compute.*ctlplane=([.0-9]+).*/\1/ p'); do
+  for node in compute-0; do
     for tool in ${pbench_comupte_tools}; do
       sudo "PATH=$PATH" sh -c "pbench-register-tool --remote=$node --name=$tool"
     done
@@ -246,7 +247,7 @@ function start_pbench () {
       sudo "PATH=$PATH" sh -c "pbench-register-tool --remote=demo$i --name=$tool"
     done
     if [ "$ftrace_vm" == "y" ]; then
-        sudo "PATH=$PATH" sh -c "pbench-register-tool --remote=$node --name=ftrace -- --cpus=2,4"
+        sudo "PATH=$PATH" sh -c "pbench-register-tool --remote=demo$i --name=ftrace -- --cpus=2,4"
     fi
   done
 }
@@ -281,185 +282,27 @@ echo "##### sanity check input parameters"
 check_input
 
 # delete exisitng NFV instances and cleanup networks
-echo "##### deleting existing nfv instances"
-delete_nfv_instances
+###echo "##### deleting existing nfv instances"
+###delete_nfv_instances
 
 # if user-data is required for cloud-init, we need to build the mime first
-echo "##### building user_data for cloud-init"
-if [[ ! -z "${user_data}" ]]; then
-  [ -f ${SCRIPT_PATH}/create_mime.py ] && [ -f ${SCRIPT_PATH}/post-boot.sh ] \
-      && [ -f  ${SCRIPT_PATH}/cloud-config ] \
-      || error "The following files are required: create_mime.py post-boot.sh cloud-config" 
-  # make sure user_data is a absolute path
-  [[ ${user_data} = /* ]] || user_data=${SCRIPT_PATH}/${user_data}
-  ${SCRIPT_PATH}/create_mime.py ${SCRIPT_PATH}/cloud-config:text/cloud-config ${SCRIPT_PATH}/post-boot.sh:text/x-shellscript > ${user_data} || error "failed to create user-data for cloud-init"
-fi
+###echo "##### building user_data for cloud-init"
+###if [[ ! -z "${user_data}" ]]; then
+  ###[ -f ${SCRIPT_PATH}/create_mime.py ] && [ -f ${SCRIPT_PATH}/post-boot.sh ] \
+      ###&& [ -f  ${SCRIPT_PATH}/cloud-config ] \
+      ###|| error "The following files are required: create_mime.py post-boot.sh cloud-config" 
+  #### make sure user_data is a absolute path
+  ###[[ ${user_data} = /* ]] || user_data=${SCRIPT_PATH}/${user_data}
+  ###${SCRIPT_PATH}/create_mime.py ${SCRIPT_PATH}/cloud-config:text/cloud-config ${SCRIPT_PATH}/post-boot.sh:text/x-shellscript > ${user_data} || error "failed to create user-data for cloud-init"
+###fi
 
 source ${overcloudrc} || error "can't load overcloudrc"
 
 # we have to delete existing: multi-queue test has peroperty setting on image and can impact single-queue test
-if openstack image list | grep ${vm_image_name}; then
-  echo "##### deleting ${vm_image_name} image"
-  openstack image delete ${vm_image_name}
-fi
-
-echo "##### building instance image"
-if ! openstack image list | grep ${vm_image_name}; then
-  #glance has no such an image listed, we need to upload it to glance
-  #does the local image directory exists
-  if [ ! -d ${nfv_tmp_dir} ]; then
-    echo "directory ${nfv_tmp_dir} not exits, creating"
-    mkdir -p ${nfv_tmp_dir} || error "failed to create ${nfv_tmp_dir}"
-  fi
-
-  #download image if it not exits on local directory
-  vm_image_file="${nfv_tmp_dir}/${vm_image_file}"
-  if [ -f ${vm_image_file} ]; then
-    echo "found image ${vm_image_file}"
-    # for existing cashed image we assume it is already processed
-    fresh_image="false"
-  else 
-    echo "image ${vm_image_file} not found, fetching"
-    # is the url pointing to local directory?
-    if [[ "$vm_image_url" =~ ^https?: ]]; then
-      wget $vm_image_url -O ${vm_image_file} || error "failed to download image"
-    elif [[ -f $vm_image_url ]]; then
-      cp $vm_image_url ${vm_image_file}
-    else
-      error "invalid url: $vm_image_url"
-    fi
-    fresh_image="true"
-  fi
-
-  # only process the image if it is fresh
-  if [[ ${fresh_image} == "true" ]]; then
-    #modify image to use persistent interface naming
-    virt-edit -a ${vm_image_file} -e "s/net.ifnames=0/net.ifnames=1/g" /boot/grub2/grub.cfg || error "virt-edit failed"
-
-    #assume vm dhco port is always ens3
-    #it is ok the move fails in case this is not a new it was moved before
-    virt-customize -a ${vm_image_file} --run-command "mv /etc/sysconfig/network-scripts/ifcfg-eth0 /etc/sysconfig/network-scripts/ifcfg-ens3" 2>/dev/null
-    #but if the following fail then we have to bail out
-    virt-edit -a ${vm_image_file} -e "s/eth0/ens3/g" /etc/sysconfig/network-scripts/ifcfg-ens3 || error "virt-edit failed"
-    # at this time, virt-cat and virt-ls can be used to doublecheck the change we made on the image
-
-    # set up password for console logon, this can be done in cloud init as well
-    virt-customize -a ${vm_image_file} --root-password password:password
-    virt-customize -a ${vm_image_file} --password cloud-user:password
-    virt-edit -a ${vm_image_file} -e "s/^UseDNS.*//g" /etc/ssh/sshd_config
-    virt-customize -a ${vm_image_file} --run-command "echo 'UseDNS no' >> /etc/ssh/sshd_config"
-      # need to have a way to pass root-keys to cloud-init 
-    virt-customize -a ${vm_image_file} --upload /home/stack/.ssh/id_rsa.pub:/tmp/stack_key
-    root_key=$(sudo cat /root/.ssh/id_rsa.pub)
-    virt-customize -a ${vm_image_file} --write /tmp/root_key:"$root_key" 
-
-    # we could disable cloud-init and only use ansible
-    #virt-customize -a ${vm_image_file} --touch /etc/cloud/cloud-init.disabled
-
-  fi
-  # done with image process
-  openstack image create --disk-format qcow2 --container-format bare   --public --file ${vm_image_file} ${vm_image_name} || error "failed to create image" 
-fi
-
-#update nova quota to allow more core use and more network
-echo "##### updating project quota"
-project_id=$(openstack project show -f value -c id admin)
-nova quota-update --instances $num_vm $project_id
-nova quota-update --cores $(( $num_vm * 10 )) $project_id
-neutron quota-update --tenant_id $project_id --network $(( $num_vm + 2 ))
-neutron quota-update --tenant_id $project_id --subnet $(( $num_vm + 2 ))
-
-echo "##### adding keypair"
-nova keypair-list | grep 'demo-key' || nova keypair-add --pub-key ~/.ssh/id_rsa.pub demo-key
-openstack security group rule list | grep 22:22 || openstack security group rule create default --protocol tcp --dst-port 22:22 --src-ip 0.0.0.0/0
-openstack security group rule list | grep icmp || openstack security group rule create default --protocol icmp
-
-echo "##### deleting exisitng nfv flavor"
-if openstack flavor list | grep nfv; then
-  openstack flavor delete nfv
-fi
-
-#  default vm_vcpu_count=6 to make sure the HT sibling not used by instance; an alternative, might be used hw:cpu_thread_policy=isolate, --vcpus 3 (rather than 6)
-echo "##### creating nfv flavor"
-
-openstack flavor create nfv --id 1 --ram 4096 --disk 20 --vcpus ${vm_vcpu_count} 
-
-# no need to set numa topo
-#  nova flavor-key 1 set hw:cpu_policy=dedicated \
-#                        hw:mem_page_size=1GB \
-#                        hw:numa_nodes=1 \
-#                        hw:numa_mempolicy=strict \
-#                        hw:numa_cpus.0=0,1,2,3,4,5 \
-#                        hw:numa_mem.0=4096
-
-nova flavor-key 1 set hw:cpu_policy=dedicated \
-                      hw:mem_page_size=1GB
-
-if [[ ${repin_kvm_emulator} == "false" ]]; then
-  nova flavor-key 1 set hw:emulator_threads_policy=isolate
-fi
-
-if [[ ${enable_HT} == "true" ]]; then
-  nova flavor-key 1 set hw:cpu_thread_policy=require
-fi
-
-if [[ ${enable_multi_queue} == "true" ]]; then
-  nova flavor-key 1 set vif_multiqueue_enabled=true
-  openstack image set ${vm_image_name} --property hw_vif_multiqueue_enabled=true
-fi
-
-echo "##### creating instance access network"
-if ! neutron net-list | grep access; then
-  if [[ ${access_network_type} == "flat" ]]; then
-    neutron net-create access --provider:network_type flat \
-                              --provider:physical_network access \
-                              --port_security_enabled=False
-  elif [[ ${access_network_type} == "vlan" ]]; then
-    neutron net-create access --provider:network_type vlan \
-                              --provider:physical_network access \
-                              --provider:segmentation_id ${access_network_vlan} \
-                              --port_security_enabled=False
-  elif [[ ${access_network_type} == "shared" ]]; then
-    # shared network always use first data port
-    neutron net-create access --provider:network_type vlan \
-                              --provider:physical_network dpdk0 \
-                              --provider:segmentation_id ${access_network_vlan} \
-                              --port_security_enabled=False
-  else
-    error "access_network_type wrong"
-  fi
-  neutron subnet-create --name access --dns-nameserver ${dns_server} access 10.1.1.0/24
-fi
-
-echo "##### creating instance provider networks"
-# the ooo templates is using sriov1/2 for data network; dpdk0/1.
-for i in $(eval echo "{0..$num_vm}"); do
-  if [[ ${provider_network_type} == "flat" ]]; then
-    provider_opt="--provider:network_type flat"
-  elif [[ ${provider_network_type} == "vlan" ]]; then
-    provider_opt="--provider:network_type vlan \
-                  --provider:segmentation_id $((data_vlan_start + i))"
-  elif [[ ${provider_network_type} == "vxlan" ]]; then
-    provider_opt="--provider:network_type vxlan \
-                  --provider:segmentation_id $((data_vxlan_start + i))"
-  else
-    error "invalid provider_network_type: ${provider_network_type}"
-  fi
-
-  if [[ ${vnic_type} == "sriov" ]]; then
-    neutron net-create provider-nfv$i ${provider_opt} \
-                                      --provider:physical_network sriov$((i % 2 + 1)) \
-                                      --port_security_enabled=False
-  else 
-    neutron net-create provider-nfv$i ${provider_opt} \
-                                      --provider:physical_network dpdk$(($i % 2)) \
-                                      --port_security_enabled=False
-  fi
-  neutron subnet-create --name provider-nfv$i \
-                        --disable-dhcp \
-                        --gateway 20.$i.0.1 \
-                        provider-nfv$i 20.$i.0.0/16
-done
+###if openstack image list | grep ${vm_image_name}; then
+  ###echo "##### deleting ${vm_image_name} image"
+  ###openstack image delete ${vm_image_name}
+###fi
 
 declare -a vmState
 
@@ -470,47 +313,9 @@ else
 fi
 
 echo "##### starting instances"
-for i in $(eval echo "{1..$num_vm}"); do
-  provider1=$(openstack port create --network provider-nfv$((i - 1)) ${vnic_option} nfv$((i - 1))-port | awk '/ id/ {print $4}')
-  provider2=$(openstack port create --network provider-nfv$i ${vnic_option} nfv$i-port | awk '/ id/ {print $4}')
-  access=$(openstack port create --network access access-port-$i | awk '/ id/ {print $4}')
-  # make sure port created complete before start the instance
-  start_instance demo$i $provider1 $provider2 $access
-  vmState[$i]=0
-done
 
 tmpfile=${SCRIPT_PATH}/tmpfile
 
-echo "##### waiting for instances go live"
-for n in {0..1000}; do
-  sleep 2
-  nova list > $tmpfile
-  completed=1
-  errored=0
-  for i in $(eval echo "{1..$num_vm}"); do
-    if [ ${vmState[$i]} -ne 1 ]; then
-      if grep demo$i $tmpfile | egrep 'ACTIVE'; then
-        vmState[$i]=1
-      elif grep demo$i $tmpfile | egrep 'ERROR'; then
-        errored=1
-        break
-      else
-        completed=0
-      fi
-    fi
-  done
-  if (( $completed || $errored )); then
-    break
-  fi
-done
-
-if (( $errored )); then
-  completed=0 
-fi
-
-if [ $completed -ne 1 ]; then
-  error "failed to start all the instances"
-fi
 
 # update /etc/hosts entry with instances
 echo "##### update /etc/hosts entry with instance names"
@@ -560,20 +365,6 @@ ansible_become=true
 [director]
 localhost ansible_connection=local
 EOF
-
-echo "##### repin threads on compute nodes"
-if [[ $vnic_type == "sriov" ]]; then
-  ansible-playbook -i $nodes ${SCRIPT_PATH}/repin_threads.yml --extra-vars "repin_kvm_emulator=${repin_kvm_emulator}" || error "failed to repin thread"
-else
-  pmd_core_list="$pmd_vm_eth0,$pmd_vm_eth1,$pmd_vm_eth2,$pmd_dpdk0,$pmd_dpdk1,$pmd_dpdk2,$spare_cores"
-  pmd_core_mask=`get_cpumask $pmd_core_list`
-  ansible-playbook -i $nodes ${SCRIPT_PATH}/repin_threads.yml --extra-vars "repin_ovs_nonpmd=${repin_ovs_nonpmd} repin_kvm_emulator=${repin_kvm_emulator} repin_ovs_pmd=${repin_ovs_pmd} pmd_vm_eth0=${pmd_vm_eth0} pmd_vm_eth1=${pmd_vm_eth1} pmd_vm_eth2=${pmd_vm_eth2} pmd_dpdk0=${pmd_dpdk0} pmd_dpdk1=${pmd_dpdk1} pmd_dpdk2=${pmd_dpdk2} pmd_core_mask=${pmd_core_mask}" || error "failed to repin thread"
-fi
-
-# give 60 sec to cloud-init to complete
-if [[ ! -z "${user_data}" ]]; then
-  sleep 60
-fi
 
 # check all VM are reachable by ping
 # try 30 times
@@ -701,9 +492,9 @@ if [[ ${run_traffic_gen} == "true" ]]; then
   
   if [[ ${run_pbench} == "true" ]]; then
     # move the results to pbench server only if not run test from browbeat
-    if [[ -z "${browbeat_nfv_vars}" ]]; then 
-      sudo -i pbench-move-results
-    fi
+    # if [[ -z "${browbeat_nfv_vars}" ]]; then 
+    #  sudo -i pbench-move-results
+    # fi
     if [[ ${stop_pbench_after} == "true" ]]; then
       stop_pbench
     fi

@@ -3,6 +3,9 @@
 - set_fact:
     pbench_configuration_environment: "{{ cenv | default('production') }}"
 
+- name: install optional repo
+  copy: src=files/rhel-optional.repo dest=/etc/yum.repos.d/rhel-optional.repo owner=root group=root mode=0644
+
 - name: install pbench repo 
   template: src=etc/yum.repos.d/pbench.repo.j2 dest=/etc/yum.repos.d/pbench.repo owner=root group=root mode=0644
 

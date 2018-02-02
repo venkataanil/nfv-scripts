@@ -20,7 +20,6 @@
 - hosts: director
   become: true
   roles:
-    - { role: common }
     - { role: pbench, when: run_pbench }
     - { role: pbench-trafficgen, when: run_pbench } 
 

@@ -1,14 +1,16 @@
 ---
-
 # this need to be done after pbench rpm installed
-- name: copy pbench-trafficgen files
-  shell: |
-    cd ~
-    [ -d atheurer-pbench ] || git clone https://github.com/atheurer/pbench.git atheurer-pbench
-    cd atheurer-pbench
-    git checkout trafficgen
-    git pull origin trafficgen
-    cd /opt/pbench-agent/bench-scripts
-    ln -s ~/atheurer-pbench/agent/bench-scripts/pbench-trafficgen
-    cd postprocess
-    ln -s ~/atheurer-pbench/agent/bench-scripts/postprocess/trafficgen-postprocess
+- git:
+    repo: https://github.com/atheurer/pbench.git
+    dest: /root/atheurer-pbench
+    version: trafficgen
+  become: true
+- file:
+    dest: /opt/pbench-agent/bench-scripts/{{item}}
+    src: /root/atheurer-pbench/agent/bench-scripts/{{item}}
+    state: link
+  become: true
+  with_items:
+    - pbench-trafficgen
+    - postprocess/trafficgen-postprocess 
+  

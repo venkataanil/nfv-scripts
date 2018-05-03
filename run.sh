@@ -255,11 +255,17 @@ function start_pbench () {
 SCRIPT_PATH=$(dirname $0)             # relative
 SCRIPT_PATH=$(cd $SCRIPT_PATH && pwd)  # absolutized and normalized
 
-echo "##### loading nfv_test.cfg"
-if [ ! -f ${SCRIPT_PATH}/nfv_test.cfg ]; then
-  error "nfv_test.cfg can't be found"
+if [ ! -z "$1" ]; then
+  cfg_file=$1
+else
+  cfg_file=nfv_test.cfg
 fi
-source ${SCRIPT_PATH}/nfv_test.cfg
+
+echo "##### loading $cfg_file"
+if [ ! -f ${SCRIPT_PATH}/${cfg_file} ]; then
+  error "${cfg_file} can't be found"
+fi
+source ${SCRIPT_PATH}/${cfg_file}
 
 # this script can be called from browbeat
 # browbeat env variable browbeat_nfv_vars to over write the cfg file variables
@@ -298,13 +304,13 @@ fi
 source ${overcloudrc} || error "can't load overcloudrc"
 
 # we have to delete existing: multi-queue test has peroperty setting on image and can impact single-queue test
-if openstack image list | grep ${vm_image_name}; then
+if openstack image list --name ${vm_image_name} | grep ${vm_image_name}; then
   echo "##### deleting ${vm_image_name} image"
   openstack image delete ${vm_image_name}
 fi
 
 echo "##### building instance image"
-if ! openstack image list | grep ${vm_image_name}; then
+if ! openstack image list --name ${vm_image_name} | grep ${vm_image_name}; then
   #glance has no such an image listed, we need to upload it to glance
   #does the local image directory exists
   if [ ! -d ${nfv_tmp_dir} ]; then
@@ -512,6 +518,9 @@ if [ $completed -ne 1 ]; then
   error "failed to start all the instances"
 fi
 
+#### JZ test point ####
+#exit 0
+
 # update /etc/hosts entry with instances
 echo "##### update /etc/hosts entry with instance names"
 sudo sed -i -r '/vm/d' /etc/hosts
@@ -591,7 +600,6 @@ done
 
 [ $reachable -eq 1 ] || error "not all VM pingable"
 
-
 # make sure remote ssh port is open
 echo "##### testing instances access via ssh"
 for n in $(seq 90); do
@@ -607,6 +615,8 @@ done
 
 [ $reachable -eq 1 ] || error "not all VM ssh port open"
 
+###### JZ test point
+#exit 0
 
 # upload ssh key to all $nodes. if cloud-init user-data is supplied, no need to update VMs 
 echo "##### update authorized ssh key"
@@ -643,7 +653,7 @@ echo traffic_src_mac=${traffic_src_mac} traffic_dst_mac=${traffic_dst_mac}
 
 vm_int_queues=$(echo ${pmd_dpdk1} | sed -e 's/,/ /g' | wc -w)
 echo "##### provision nfv work load"
-ansible-playbook -i $nodes ${SCRIPT_PATH}/nfv.yml --extra-vars "run_pbench=${run_pbench} traffic_src_mac=${traffic_src_mac} traffic_dst_mac=${traffic_dst_mac} routing=${routing} testpmd_fwd=${testpmd_fwd} num_vm=${num_vm} vm_vcpu_count=${vm_vcpu_count} mqueue=${enable_multi_queue} vm_int_queues=${vm_int_queues}" || error "failed to run NFV application"
+ansible-playbook -i $nodes ${SCRIPT_PATH}/nfv.yml --extra-vars "run_pbench=${run_pbench} traffic_src_mac=${traffic_src_mac} traffic_dst_mac=${traffic_dst_mac} routing=${routing} testpmd_fwd=${testpmd_fwd} num_vm=${num_vm} vm_vcpu_count=${vm_vcpu_count} mqueue=${enable_multi_queue} vm_int_queues=${vm_int_queues} enable_spectre=${enable_spectre}" || error "failed to run NFV application"
 
 
 # running traffic
@@ -672,12 +682,8 @@ if [[ ${run_traffic_gen} == "true" ]]; then
           --dst-ips=20.${num_vm}.255.254,20.0.255.254"
   
   opt_vlan="--vlan-ids=${data_vlan_start},$((data_vlan_start+num_vm))"
-  # trex has issue with vlan traffic, here is a tempary workaround
-  if [[ "$traffic_gen" == "trex-txrx" ]]; then
-    opt_vlan=""
-  fi
   
-  if [[ $routing == "vpp" ]]; then
+  if [[ $routing == "vpp" || $routing == "kernel-routing" ]]; then
      if [[ ${provider_network_type} == "flat" ]]; then
        sudo "PATH=$PATH" sh -c "pbench-trafficgen \
             ${opt_base} ${opt_mac} ${opt_ip}" 

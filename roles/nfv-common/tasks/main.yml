@@ -15,6 +15,15 @@
     echo isolated_cores=2-$topcpu >> /etc/tuned/cpu-partitioning-variables.conf
     tuned-adm profile cpu-partitioning
     grubby --update-kernel=`grubby --default-kernel` --args="default_hugepagesz=1G hugepagesz=1G hugepages=1 isolcpus=2-$topcpu ipv6.disable=1"
+- name: update kernel level
+  yum:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - kernel
+    - kernel-tools
+    - kernel-tools-libs
+  when: enable_spectre
 - name: reboot and get a clean start
   shell: "nohup sh -c '( sleep 5 ; shutdown -r now )' &"
   async: 0
@@ -27,4 +36,19 @@
     port: 22
     delay: 10
     timeout: 90
+- name: meltdown/spectre handling
+  shell:
+    if [ -d /sys/kernel/debug/x86 ]; then
+      cd /sys/kernel/debug/x86
+      if [ {{ enable_spectre|default(false) }} = "false" ]; then
+        echo 0 > pti_enabled
+        echo 0 > retp_enabled
+        echo 0 > ibrs_enabled
+      else
+        echo 1 > pti_enabled
+        echo 1 > retp_enabled
+        echo 0 > ibrs_enabled
+      fi
+    fi
+  ignore_errors: true
 

@@ -1,0 +1,17 @@
+---
+- name: Copy kernel files
+  copy:
+    src: "{{ item }}"
+    dest: /root/{{ item }}
+    owner: root
+    group: root
+  become: true
+  with_items:
+    - kernel-3.10.0-693.30.1.el7.x86_64.rpm
+    - kernel-tools-3.10.0-693.30.1.el7.x86_64.rpm
+    - kernel-tools-libs-3.10.0-693.30.1.el7.x86_64.rpm
+  
+- name: install kernel files
+  shell: |
+    find /root -name "kernel*" -exec yum install -y {} \;
+  become: true

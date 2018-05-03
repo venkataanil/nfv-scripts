@@ -12,7 +12,9 @@
   roles:
     - { role: common }
     - { role: pbench, when: run_pbench }
+    - { role: kernel-update }
     - { role: nfv-common }
+    - { role: kernel-bridge, when: routing == "kernel-bridge" }
     - { role: vpp, when: routing == "vpp" }
     - { role: testpmd, when: routing == "testpmd" }
     - { role: testpmd-sriov, when: routing == "testpmd-sriov"}

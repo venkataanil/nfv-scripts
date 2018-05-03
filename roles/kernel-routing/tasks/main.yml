@@ -7,11 +7,11 @@
     num=$(echo $myhostname | sed -r -n "s/demo([0-9]+)/\1/p")
     dpdk-devbind -u {{dpdk_slot_1}} {{dpdk_slot_2}}
     dpdk-devbind -b {{kernel_net_driver}} {{dpdk_slot_1}} {{dpdk_slot_2}}
-    ip add add 192.168.$(($num - 1)).$num/24 dev eth1
-    ip add add 192.168.$num.$num/24 dev eth2
-    ip link set up dev eth1
-    ip link set up dev eth2
-    max={{ vm_num }}
+    ip add add 192.168.$(($num - 1)).$num/24 dev ens4
+    ip add add 192.168.$num.$num/24 dev ens5
+    ip link set up dev ens4
+    ip link set up dev ens5
+    max={{ num_vm }}
     for (( j=0; j<=max; j++ ))
     do
       if (( j < num-1 )); then

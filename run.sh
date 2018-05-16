@@ -519,7 +519,7 @@ if [ $completed -ne 1 ]; then
 fi
 
 #### JZ test point ####
-#exit 0
+exit 0
 
 # update /etc/hosts entry with instances
 echo "##### update /etc/hosts entry with instance names"
@@ -566,9 +566,14 @@ ansible_become=true
 ansible_connection=ssh
 ansible_user=heat-admin
 ansible_become=true
-[director]
-localhost ansible_connection=local
 EOF
+
+if [ -z "${traffic_gen_remote_addr}" ]; then
+  #trafficgen is not remote
+  printf "[trafficgen]\nlocalhost ansible_connection=local\n" >> $nodes
+else
+  printf "[trafficgen]\n${traffic_gen_remote_addr} ansible_connection=ssh ansible_user=root\n"
+fi
 
 echo "##### repin threads on compute nodes"
 if [[ $vnic_type == "sriov" ]]; then
@@ -646,14 +651,21 @@ for host in ${groups[@]}; do
 done
 
 # get mac address from pci slot number
-echo "##### getting mac address from pci slot number"
-get_mac_from_pci_slot ${traffic_gen_src_slot} traffic_src_mac
-get_mac_from_pci_slot ${traffic_gen_dst_slot} traffic_dst_mac
+if [ -z "${traffic_src_mac}" ] || [ -z "${traffic_dst_mac}" ] ; then
+    if [ -z "${traffic_gen_remote_addr}" ]; then
+        # local trafficgen can get mac address from pci slot number
+        get_mac_from_pci_slot ${traffic_gen_src_slot} traffic_src_mac
+        get_mac_from_pci_slot ${traffic_gen_dst_slot} traffic_dst_mac
+    else
+        # remote trafficgen has to supply the mac address, so error out here
+        error "traffic_src_mac or traffic_dst_mac unspecified for ${traffic_gen_remote_addr}"
+    fi
+fi
 echo traffic_src_mac=${traffic_src_mac} traffic_dst_mac=${traffic_dst_mac}
-
+        
 vm_int_queues=$(echo ${pmd_dpdk1} | sed -e 's/,/ /g' | wc -w)
 echo "##### provision nfv work load"
-ansible-playbook -i $nodes ${SCRIPT_PATH}/nfv.yml --extra-vars "run_pbench=${run_pbench} traffic_src_mac=${traffic_src_mac} traffic_dst_mac=${traffic_dst_mac} routing=${routing} testpmd_fwd=${testpmd_fwd} num_vm=${num_vm} vm_vcpu_count=${vm_vcpu_count} mqueue=${enable_multi_queue} vm_int_queues=${vm_int_queues} enable_spectre=${enable_spectre}" || error "failed to run NFV application"
+ansible-playbook -i $nodes ${SCRIPT_PATH}/nfv.yml --extra-vars "run_pbench=${run_pbench} exp_pbench_trafficgen=${exp_pbench_trafficgen} traffic_src_mac=${traffic_src_mac} traffic_dst_mac=${traffic_dst_mac} routing=${routing} testpmd_fwd=${testpmd_fwd} num_vm=${num_vm} vm_vcpu_count=${vm_vcpu_count} mqueue=${enable_multi_queue} vm_int_queues=${vm_int_queues} enable_spectre=${enable_spectre}" || error "failed to run NFV application"
 
 
 # running traffic

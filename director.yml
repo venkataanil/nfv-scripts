@@ -1,4 +1,4 @@
-- hosts: director
+- hosts: trafficgen
   become: true
   roles:
     - { role: pbench }

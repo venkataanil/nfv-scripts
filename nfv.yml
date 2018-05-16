@@ -5,7 +5,7 @@
   roles:
     - { role: common }
     - { role: pbench, when: run_pbench }
-    - { role: pbench-compute-fix, when: run_pbench }
+    - { role: spectre }
 
 - hosts: VMs
   become: true
@@ -19,9 +19,9 @@
     - { role: testpmd, when: routing == "testpmd" }
     - { role: testpmd-sriov, when: routing == "testpmd-sriov"}
 
-- hosts: director
+- hosts: trafficgen 
   become: true
   roles:
     - { role: pbench, when: run_pbench }
-    - { role: pbench-trafficgen, when: run_pbench } 
+    - { role: pbench-trafficgen, when: exp_pbench_trafficgen } 
 

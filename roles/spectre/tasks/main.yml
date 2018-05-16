@@ -1,0 +1,20 @@
+---
+
+- name: spectre & meltdown 
+  shell: |
+    if cd  /sys/kernel/debug/x86; then
+      if [ `echo {{ enable_spectre|default(false) }} | tr [:upper:] [:lower:]` = "false" ]; then
+        echo 0 > pti_enabled
+        echo 0 > retp_enabled
+        echo 0 > ibrs_enabled
+      elif dmidecode|grep Gold; then
+        echo 1 > pti_enabled
+        echo 1 > ibrs_enabled
+        echo 0 > retp_enabled
+      else
+        echo 1 > pti_enabled
+        echo 1 > retp_enabled
+        echo 0 > ibrs_enabled 
+      fi
+    fi
+  ignore_errors: true
